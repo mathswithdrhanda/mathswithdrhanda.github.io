@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Momentum as a Vector</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a lab notebook. Sticky contents rail on the left; each example is a bench with a live track (canvas) beside its step-by-step working. */
+:root{
+  --bg:#eef3f5;
+  --surface:#ffffff;
+  --ink:#14232e;
+  --muted:#5a6b77;
+  --line:#d5dfe5;
+  --accent:#0d7a8a;
+  --accent-soft:#dcf0f2;
+  --impulse:#c96a12;
+  --impulse-soft:#fbeedd;
+  --vel:#2a56c9;
+  --warn:#b8324f;
+  --warn-soft:#fbe4ea;
+  --good:#1f8a4c;
+  --objA:#ffd35c;
+  --objB:#9fd8df;
+  --p2:#7a4fc9;
+  --track:#f6f9fa;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, "Consolas", monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0c161c; --surface:#13212a; --ink:#e3ecf0; --muted:#91a5b0; --line:#253a46;
+    --accent:#45b9c7; --accent-soft:#16323a; --impulse:#f0a04f; --impulse-soft:#3a2a17;
+    --vel:#86a8ff; --warn:#ff7f97; --warn-soft:#3b1d26; --good:#5fd08f;
+    --objA:#f2c84f; --objB:#7cc6cf; --p2:#b8a2ff; --track:#0f1b22; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0c161c; --surface:#13212a; --ink:#e3ecf0; --muted:#91a5b0; --line:#253a46;
+  --accent:#45b9c7; --accent-soft:#16323a; --impulse:#f0a04f; --impulse-soft:#3a2a17;
+  --vel:#86a8ff; --warn:#ff7f97; --warn-soft:#3b1d26; --good:#5fd08f;
+  --objA:#f2c84f; --objB:#7cc6cf; --p2:#b8a2ff; --track:#0f1b22; color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.55}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;line-height:1.15;margin:0}
+h1{font-size:clamp(1.9rem,4vw,2.7rem);font-weight:700}
+h2{font-size:1.55rem;font-weight:700}
+h3{font-size:1.1rem;font-weight:600}
+p{margin:0;max-width:68ch}
+sup{font-size:.7em;line-height:0}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:6px}
+
+.shell{display:grid;grid-template-columns:230px minmax(0,1fr);gap:32px;max-width:1280px;margin:0 auto;padding:24px 24px 64px}
+nav.rail{position:sticky;top:16px;align-self:start;display:flex;flex-direction:column;gap:4px;font-size:.92rem}
+nav.rail .grp{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:14px 0 4px;font-weight:600}
+nav.rail a{color:var(--ink);text-decoration:none;padding:6px 10px;border-radius:8px;display:flex;gap:8px;align-items:center}
+nav.rail a:hover{background:var(--surface)}
+nav.rail a .n{font-family:var(--mono);font-size:.78rem;color:var(--accent);min-width:2.2em}
+.controls-global{margin-top:16px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);display:flex;flex-direction:column;gap:6px;font-size:.88rem}
+main{display:flex;flex-direction:column;gap:40px;min-width:0}
+
+header.hero{display:flex;flex-direction:column;gap:12px;padding-top:8px}
+.eyebrow{font-family:var(--mono);font-size:.8rem;color:var(--accent);letter-spacing:.04em}
+.lede{color:var(--muted);font-size:1.08rem}
+.keyrow{display:flex;flex-wrap:wrap;gap:12px;margin-top:6px}
+.key{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;padding:10px 14px;display:flex;flex-direction:column;gap:2px;min-width:200px;flex:1}
+.key.imp{border-left-color:var(--impulse)}
+.key.con{border-left-color:var(--vel)}
+.key .f{font-family:var(--mono);font-size:1.05rem;font-weight:600}
+.key .d{font-size:.85rem;color:var(--muted)}
+
+section.unit{display:flex;flex-direction:column;gap:18px;scroll-margin-top:16px}
+.unit-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.tag{font-family:var(--mono);font-size:.8rem;background:var(--accent);color:var(--surface);padding:3px 9px;border-radius:999px;font-weight:600}
+.tag.ex{background:var(--ink)}
+.prose{display:flex;flex-direction:column;gap:10px}
+
+.bench{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px;align-items:start}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.question{font-size:1rem}
+.question ol{margin:6px 0 0;padding-left:1.4em}
+canvas.sim{width:100%;height:230px;display:block;border-radius:10px;background:var(--track);border:1px solid var(--line)}
+canvas.sim.tall{height:300px}
+.simbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{border:1px solid var(--line);background:var(--surface);padding:7px 14px;border-radius:8px;cursor:pointer;font-weight:500;font-size:.92rem;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--surface);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.hint{font-size:.85rem;color:var(--muted)}
+
+.predict{border:1px dashed var(--accent);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:var(--accent-soft)}
+.predict .lbl{font-family:var(--mono);font-size:.75rem;color:var(--accent);font-weight:600;letter-spacing:.05em}
+.opts{display:flex;flex-wrap:wrap;gap:8px}
+.opt{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:.92rem}
+.opt.right{border-color:var(--good);background:color-mix(in srgb,var(--good) 14%,var(--surface))}
+.opt.wrong{border-color:var(--warn);background:var(--warn-soft)}
+.fb{font-size:.9rem;min-height:0}
+
+.working{display:flex;flex-direction:column;gap:10px}
+.step{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface)}
+.step.hidden{display:none}
+.step.fresh{animation:pop .35s ease-out}
+@keyframes pop{from{transform:translateY(6px);opacity:.3}to{transform:none;opacity:1}}
+.math{font-family:var(--mono);font-size:.95rem;line-height:1.8;overflow-x:auto}
+.math .hl{color:var(--accent);font-weight:600}
+.math .neg{color:var(--warn);font-weight:600}
+.note{font-size:.86rem;background:var(--impulse-soft);border-radius:8px;padding:6px 10px;border-left:3px solid var(--impulse)}
+.note.watch{background:var(--warn-soft);border-left-color:var(--warn)}
+.note.solve{background:var(--accent-soft);border-left-color:var(--accent)}
+.answer{font-weight:600;border-left:3px solid var(--good);padding-left:10px}
+.frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;font-size:.85em;line-height:1.1;margin:0 2px}
+.frac>span:first-child{border-bottom:1.5px solid currentColor;padding:0 2px}
+.stepbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.progress{font-family:var(--mono);font-size:.8rem;color:var(--muted)}
+
+.sliders{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.sl{display:flex;flex-direction:column;gap:2px}
+.sl label{font-size:.86rem;display:flex;justify-content:space-between;gap:8px}
+.sl label output{font-family:var(--mono);font-weight:600;color:var(--accent)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.readouts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.ro{border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--track)}
+.ro .k{font-size:.78rem;color:var(--muted)}
+.ro .v{font-family:var(--mono);font-size:1.1rem;font-weight:600;font-variant-numeric:tabular-nums}
+.ro.imp .v{color:var(--impulse)}
+.ro.acc .v{color:var(--accent)}
+.toggle{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.toggle button{border:0;background:transparent;padding:5px 14px;cursor:pointer;font-family:var(--mono);font-size:.9rem}
+.toggle button[aria-pressed="true"]{background:var(--accent);color:var(--surface)}
+.status{font-size:.9rem;padding:8px 12px;border-radius:8px;background:var(--track);border:1px solid var(--line)}
+.status.bad{background:var(--warn-soft);border-color:var(--warn)}
+
+.practice{display:flex;flex-direction:column;gap:14px}
+.pq{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:start}
+.pq .num{font-family:var(--display);font-weight:700;font-size:1.3rem;color:var(--accent);min-width:1.4em}
+.pq .body{display:flex;flex-direction:column;gap:8px}
+.ansrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.ansrow input{width:120px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--track);font-family:var(--mono)}
+.ansrow .unit{font-family:var(--mono);font-size:.9rem;color:var(--muted)}
+.mark{font-size:.8rem;font-family:var(--mono);color:var(--muted)}
+.res{font-size:.9rem;font-weight:500}
+.res.ok{color:var(--good)} .res.no{color:var(--warn)}
+.sol{display:none;font-family:var(--mono);font-size:.9rem;background:var(--track);border:1px solid var(--line);border-radius:8px;padding:10px 12px;line-height:1.8}
+.sol.show{display:block}
+.score{font-family:var(--mono);font-size:.9rem}
+
+
+.fhead{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.fprog{height:6px;border-radius:999px;background:var(--line);overflow:hidden}
+.fprog span{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
+.frames{display:flex;flex-direction:column;gap:10px}
+.frame{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;background:var(--surface)}
+.frame.active{border:2px solid var(--accent);box-shadow:0 2px 10px color-mix(in srgb,var(--accent) 18%,transparent)}
+.frame.done{background:var(--track)}
+.frame.done .fq{color:var(--muted)}
+.frame.fresh{animation:pop .35s ease-out}
+.fnum{font-family:var(--mono);font-size:.72rem;letter-spacing:.06em;color:var(--accent);font-weight:600;text-transform:uppercase}
+.fact{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.fact input{width:130px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--track);font-family:var(--mono)}
+.fact .unit{font-family:var(--mono);font-size:.9rem;color:var(--muted)}
+.remedy{font-size:.9rem;background:var(--warn-soft);border-left:3px solid var(--warn);border-radius:8px;padding:8px 10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.frame.done .unsure{display:none}
+.remedy.nudge{background:var(--accent-soft);border-left-color:var(--accent)}
+.confirm{font-size:.9rem;border-left:3px solid var(--good);padding:4px 10px;color:var(--ink)}
+.finish{font-size:.95rem;padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--good) 14%,var(--surface));border:1px solid var(--good)}
+.summary{display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);padding-top:12px}
+.summary .step{display:grid}
+.opt:disabled{cursor:default}
+@media (prefers-reduced-motion: reduce){ .frame.fresh{animation:none} .fprog span{transition:none} }
+.homebtn{align-self:flex-start;font-size:.85rem;font-weight:600;color:var(--accent);text-decoration:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 12px}
+.homebtn:hover{border-color:var(--accent)}
+footer{margin-top:24px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:.85rem}
+
+@media (max-width:960px){
+  .shell{grid-template-columns:1fr;padding:16px}
+  nav.rail{position:static;flex-direction:row;flex-wrap:wrap;gap:4px}
+  nav.rail .grp{width:100%;margin:6px 0 0}
+  .controls-global{width:100%}
+  .bench{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion: reduce){
+  .step.fresh{animation:none}
+}
+
+.vecin{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:1rem}
+.vecin input{width:80px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--track);font-family:var(--mono)}
+.vecin b{font-style:italic}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:4px}
+.sw.vel{background:var(--vel)} .sw.imp{background:var(--impulse)} .sw.acc{background:var(--accent)}
+.question b{font-weight:700}
+canvas.sim.tall{height:460px}
+#cL{height:360px}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="rail" aria-label="Contents">
+  <div class="grp">1.3 Momentum as a vector</div>
+  <a href="#idea"><span class="n">→</span>The big idea</a>
+  <a href="#ex8"><span class="n">Ex 8</span>Finding a new velocity</a>
+  <a href="#ex9"><span class="n">Ex 9</span>Ice hockey puck</a>
+  <a href="#ex10"><span class="n">Ex 10</span>Squash ball and wall</a>
+  <a href="#ex11"><span class="n">Ex 11</span>Two particles coalesce</a>
+  <div class="grp">Try it yourself</div>
+  <a href="#lab"><span class="n">Lab</span>Vector impulse lab</a>
+  <a href="#practice"><span class="n">Q</span>Practice questions</a>
+  <div class="controls-global">
+    <label><input type="checkbox" id="slowmo"> Slow motion</label>
+    <label><input type="checkbox" id="loopall"> Loop animations</label>
+  </div>
+</nav>
+
+<main>
+<header class="hero">
+  <a class="homebtn" href="index.html">← All resources</a>
+  <div class="eyebrow">Chapter 1 · Momentum and impulse · Section 1.3</div>
+  <h1>Momentum as a Vector</h1>
+  <p class="lede">The same two principles you used in a straight line, now with i and j. Predict, watch the animation, then work through each example one frame at a time.</p>
+  <div class="keyrow">
+    <div class="key imp"><span class="f">I = mv − mu</span><span class="d">Impulse equals change in momentum, as vectors</span></div>
+    <div class="key con"><span class="f">m₁u₁ + m₂u₂ = m₁v₁ + m₂v₂</span><span class="d">Conservation of momentum, as vectors</span></div>
+    <div class="key"><span class="f">|ai + bj| = √(a² + b²)</span><span class="d">Magnitude of a vector, by Pythagoras</span></div>
+  </div>
+</header>
+
+<!-- ============ IDEA ============ -->
+<section class="unit" id="idea">
+  <div class="unit-head"><span class="tag">1.3</span><h2>The big idea</h2></div>
+  <div class="prose">
+    <p>So far every velocity has been along one line, so a plus or minus sign was enough to show direction. Impulse and momentum are vectors, though, so when a body moves in two dimensions you write its velocity in the form ai + bj.</p>
+    <p>Nothing about the principles changes. The impulse–momentum principle becomes <strong>I = mv − mu</strong>, where u and v are now velocity vectors, and conservation of momentum becomes <strong>m₁u₁ + m₂u₂ = m₁v₁ + m₂v₂</strong>. The working is simpler than it looks, because you can deal with the i parts and the j parts separately.</p>
+    <p>In the animations, the left panel shows the motion and the right panel shows the momentum vectors drawn nose to tail: the old momentum <span class="sw vel"></span>mu plus the impulse <span class="sw imp"></span>I gives the new momentum <span class="sw acc"></span>mv.</p>
+  </div>
+</section>
+
+<!-- ============ EXAMPLE 8 ============ -->
+<section class="unit" id="ex8">
+  <div class="unit-head"><span class="tag ex">Example 8</span><h2>Finding the new velocity</h2></div>
+  <div class="bench">
+    <div class="card">
+      <div class="question">A particle of mass 0.2 kg is moving with velocity (10<b>i</b> − 5<b>j</b>) m s<sup>−1</sup> when it receives an impulse (3<b>i</b> − 2<b>j</b>) N s. Find the new velocity of the particle.</div>
+      <canvas class="sim tall" id="c8"></canvas>
+      <div class="predict" data-predict="8"></div>
+      <div class="simbar"><button class="btn primary" data-play="8">▶ Play</button><button class="btn" data-reset="8">Reset</button></div>
+    </div>
+    <div class="card"><div class="working" data-work="8"></div></div>
+  </div>
+</section>
+
+<!-- ============ EXAMPLE 9 ============ -->
+<section class="unit" id="ex9">
+  <div class="unit-head"><span class="tag ex">Example 9</span><h2>An ice hockey puck</h2></div>
+  <div class="bench">
+    <div class="card">
+      <div class="question">An ice hockey puck of mass 0.17 kg receives an impulse <b>Q</b> N s. Immediately before the impulse the velocity of the puck is (10<b>i</b> + 5<b>j</b>) m s<sup>−1</sup> and immediately afterwards its velocity is (15<b>i</b> − 7<b>j</b>) m s<sup>−1</sup>. Find the magnitude of <b>Q</b> and the angle between <b>Q</b> and <b>i</b>.</div>
+      <canvas class="sim tall" id="c9"></canvas>
+      <div class="predict" data-predict="9"></div>
+      <div class="simbar"><button class="btn primary" data-play="9">▶ Play</button><button class="btn" data-reset="9">Reset</button></div>
+    </div>
+    <div class="card"><div class="working" data-work="9"></div></div>
+  </div>
+</section>
+
+<!-- ============ EXAMPLE 10 ============ -->
+<section class="unit" id="ex10">
+  <div class="unit-head"><span class="tag ex">Example 10</span><h2>A squash ball hits a wall</h2></div>
+  <div class="bench">
+    <div class="card">
+      <div class="question">A squash ball of mass 0.025 kg is moving with velocity (22<b>i</b> + 37<b>j</b>) m s<sup>−1</sup> when it hits a wall. It rebounds with velocity (10<b>i</b> − 11<b>j</b>) m s<sup>−1</sup>. Find the impulse exerted by the wall on the squash ball.</div>
+      <canvas class="sim tall" id="c10"></canvas>
+      <div class="predict" data-predict="10"></div>
+      <div class="simbar"><button class="btn primary" data-play="10">▶ Play</button><button class="btn" data-reset="10">Reset</button></div>
+    </div>
+    <div class="card"><div class="working" data-work="10"></div></div>
+  </div>
+</section>
+
+<!-- ============ EXAMPLE 11 ============ -->
+<section class="unit" id="ex11">
+  <div class="unit-head"><span class="tag ex">Example 11</span><h2>Two particles coalesce</h2></div>
+  <div class="bench">
+    <div class="card">
+      <div class="question">A particle of mass 0.15 kg is moving with velocity (20<b>i</b> − 10<b>j</b>) m s<sup>−1</sup> when it collides with a particle of mass 0.25 kg moving with velocity (16<b>i</b> − 8<b>j</b>) m s<sup>−1</sup>. The two particles coalesce and form one particle of mass 0.4 kg. Find the velocity of the combined particle.</div>
+      <canvas class="sim tall" id="c11"></canvas>
+      <div class="predict" data-predict="11"></div>
+      <div class="simbar"><button class="btn primary" data-play="11">▶ Play</button><button class="btn" data-reset="11">Reset</button></div>
+    </div>
+    <div class="card"><div class="working" data-work="11"></div></div>
+  </div>
+</section>
+
+<!-- ============ LAB ============ -->
+<section class="unit" id="lab">
+  <div class="unit-head"><span class="tag">Lab</span><h2>Vector impulse lab</h2></div>
+  <p class="prose">Choose a mass, a starting velocity, and an impulse. The diagram adds the impulse to the old momentum, nose to tail, to give the new momentum. Divide that by the mass and you have the new velocity.</p>
+  <div class="card">
+    <div class="sliders">
+      <div class="sl"><label for="lm">Mass m <output id="lmo"></output></label><input type="range" id="lm" min="0.1" max="2" step="0.1" value="0.5"></div>
+      <div class="sl"><label for="lui">u: i part <output id="luio"></output></label><input type="range" id="lui" min="-10" max="10" step="1" value="4"></div>
+      <div class="sl"><label for="luj">u: j part <output id="lujo"></output></label><input type="range" id="luj" min="-10" max="10" step="1" value="2"></div>
+      <div class="sl"><label for="lii">I: i part <output id="liio"></output></label><input type="range" id="lii" min="-6" max="6" step="0.5" value="3"></div>
+      <div class="sl"><label for="lij">I: j part <output id="lijo"></output></label><input type="range" id="lij" min="-6" max="6" step="0.5" value="-4"></div>
+    </div>
+    <canvas class="sim tall" id="cL"></canvas>
+    <div class="readouts">
+      <div class="ro"><div class="k">Old momentum mu</div><div class="v" id="lmu"></div></div>
+      <div class="ro imp"><div class="k">Impulse I</div><div class="v" id="lI"></div></div>
+      <div class="ro acc"><div class="k">New momentum mv = mu + I</div><div class="v" id="lmv"></div></div>
+      <div class="ro acc"><div class="k">New velocity v</div><div class="v" id="lv"></div></div>
+      <div class="ro"><div class="k">New speed |v|</div><div class="v" id="lsp"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PRACTICE ============ -->
+<section class="unit" id="practice">
+  <div class="unit-head"><span class="tag">Q</span><h2>Practice questions</h2><span class="score" id="score"></span></div>
+  <p class="prose">Fill in the i and j parts of each vector, or a single number where only one box is shown. Give answers to 3 significant figures where they are not exact.</p>
+  <div class="card practice" id="pqs"></div>
+</section>
+
+<footer>© 2026 Dr Rishi Handa · mathswithdrhanda.github.io</footer>
+</main>
+</div>
+
+<script>
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const fmt = (x, d=3) => { const r = Math.round(x*Math.pow(10,d))/Math.pow(10,d); return (Object.is(r,-0)?0:r).toString().replace('-', '−'); };
+const fmtV = (a, b) => {
+  if (Math.abs(a) < 1e-9 && Math.abs(b) < 1e-9) return '0';
+  if (Math.abs(a) < 1e-9) return `${fmt(b)}j`;
+  if (Math.abs(b) < 1e-9) return `${fmt(a)}i`;
+  return `${fmt(a)}i ${b < 0 ? '−' : '+'} ${fmt(Math.abs(b))}j`;
+};
+const MONO = () => css('--mono').split(',')[0];
+const BODY = () => css('--body').split(',')[0];
+
+function fit(canvas){
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== Math.round(w*dpr) || canvas.height !== Math.round(h*dpr)){ canvas.width = Math.round(w*dpr); canvas.height = Math.round(h*dpr); }
+  const ctx = canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx, w, h};
+}
+function text(ctx, s, x, y, o={}){
+  ctx.save(); ctx.fillStyle = o.color || css('--muted'); ctx.textAlign = o.align || 'left'; ctx.textBaseline = o.base || 'alphabetic';
+  ctx.font = `${o.weight||500} ${o.size||12}px ${o.mono ? MONO() : BODY()}, sans-serif`;
+  ctx.fillText(s, x, y); ctx.restore();
+}
+function arrow2(ctx, x1, y1, x2, y2, color, label, o={}){
+  const dx = x2-x1, dy = y2-y1, L = Math.hypot(dx, dy); if (L < 2) return;
+  const ux = dx/L, uy = dy/L, hl = Math.min(11, L*0.45);
+  ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = o.w || 2.5;
+  if (o.dash) ctx.setLineDash(o.dash);
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2 - ux*hl*0.8, y2 - uy*hl*0.8); ctx.stroke(); ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(x2 - ux*hl - uy*hl*0.5, y2 - uy*hl + ux*hl*0.5); ctx.lineTo(x2 - ux*hl + uy*hl*0.5, y2 - uy*hl - ux*hl*0.5); ctx.closePath(); ctx.fill();
+  if (label){
+    const side = o.side || 1, off = o.off || 14;
+    const mx = (x1+x2)/2 - uy*off*side, my = (y1+y2)/2 + ux*off*side;
+    ctx.font = `600 12px ${MONO()}, monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const tw = ctx.measureText(label).width;
+    ctx.fillStyle = css('--track'); ctx.globalAlpha = 0.85; ctx.fillRect(mx - tw/2 - 3, my - 8, tw + 6, 16); ctx.globalAlpha = 1;
+    ctx.fillStyle = color; ctx.fillText(label, mx, my);
+  }
+  ctx.restore();
+}
+function dot(ctx, x, y, r, fill, sub){
+  ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fillStyle = fill; ctx.fill();
+  ctx.lineWidth = 2; ctx.strokeStyle = '#14232e'; ctx.stroke();
+  if (sub){ ctx.fillStyle = '#14232e'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `700 10px ${BODY()}, sans-serif`; ctx.fillText(sub, x, y); }
+  ctx.restore();
+}
+function panel(ctx, b, title){
+  ctx.save(); ctx.strokeStyle = css('--line'); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(b.x, b.y, b.w, b.h, 8) : ctx.rect(b.x, b.y, b.w, b.h); ctx.stroke(); ctx.restore();
+  text(ctx, title, b.x + 10, b.y + 18, {weight:600, color:css('--ink'), size:12});
+}
+function axesKey(ctx, x, y){
+  const c = css('--muted');
+  arrow2(ctx, x, y, x + 26, y, c, null, {w:1.5}); arrow2(ctx, x, y, x, y - 26, c, null, {w:1.5});
+  text(ctx, 'i', x + 30, y + 4, {mono:true, weight:600}); text(ctx, 'j', x - 3, y - 30, {mono:true, weight:600});
+}
+function layout(w, h){
+  if (w < 700){ const hh = (h - 24)/2; return {L:{x:8, y:8, w:w-16, h:hh}, R:{x:8, y:16+hh, w:w-16, h:hh}}; }
+  const lw = Math.round(w*0.54);
+  return {L:{x:8, y:8, w:lw-12, h:h-16}, R:{x:lw+4, y:8, w:w-lw-12, h:h-16}};
+}
+/* largest scale so every ray from C stays inside box b (with padding) */
+function fitScale(C, rays, b, pad=26){
+  let s = Infinity;
+  rays.forEach(([x, y]) => {
+    if (x > 0) s = Math.min(s, (b.x + b.w - pad - C.x)/x);
+    if (x < 0) s = Math.min(s, (C.x - b.x - pad)/(-x));
+    if (y > 0) s = Math.min(s, (C.y - b.y - pad - 18)/y);
+    if (y < 0) s = Math.min(s, (b.y + b.h - pad - C.y)/(-y));
+  });
+  return s;
+}
+const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : 1 - Math.pow(1 - x, 3);
+
+/* ---------- animation engine ---------- */
+const TC = 1.6, TT = 4.2;
+const sims = {};
+class Sim{
+  constructor(id, canvas, duration, draw){ this.id=id; this.c=canvas; this.T=duration; this.drawFn=draw; this.t=0; this.running=false; this.render(); }
+  render(){ const {ctx,w,h} = fit(this.c); ctx.clearRect(0,0,w,h); this.drawFn(ctx, this.t, w, h); }
+  play(){
+    if (this.t >= this.T) this.t = 0;
+    if (reduced){ this.t = this.T; this.render(); this.btn(); return; }
+    this.running = true; this.last = performance.now();
+    const step = now => {
+      if (!this.running) return;
+      this.t += (now - this.last)/1000 * ($('#slowmo').checked ? 0.3 : 1); this.last = now;
+      if (this.t >= this.T){ if ($('#loopall').checked) this.t = 0; else { this.t = this.T; this.running = false; this.render(); this.btn(); return; } }
+      this.render(); requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step); this.btn();
+  }
+  pause(){ this.running = false; this.btn(); }
+  reset(){ this.running = false; this.t = 0; this.render(); this.btn(); }
+  btn(){ const b = document.querySelector(`[data-play="${this.id}"]`); if (b) b.textContent = this.running ? '❚❚ Pause' : (this.t >= this.T ? '↻ Replay' : '▶ Play'); }
+}
+document.addEventListener('click', e => {
+  const p = e.target.closest('[data-play]'); if (p){ const s = sims[p.dataset.play]; s.running ? s.pause() : s.play(); }
+  const r = e.target.closest('[data-reset]'); if (r) sims[r.dataset.reset].reset();
+});
+
+/* motion panel: one body gets an impulse at C */
+function drawMotion(ctx, b, t, cfg){
+  panel(ctx, b, cfg.title || 'Motion (plan view)');
+  const C = {x: b.x + b.w*(cfg.cx ?? 0.5), y: b.y + b.h*(cfg.cy ?? 0.55)};
+  const before = [-cfg.u[0]*TC, -cfg.u[1]*TC], after = [cfg.v[0]*(TT-TC), cfg.v[1]*(TT-TC)];
+  const s = fitScale(C, [before, after], b);
+  const P = (x, y) => [C.x + x*s, C.y - y*s];
+  if (cfg.wall){
+    ctx.save(); ctx.fillStyle = css('--line'); ctx.fillRect(b.x + 12, C.y - 16 - 6, b.w - 24, 6);
+    ctx.strokeStyle = css('--muted'); ctx.lineWidth = 1;
+    for (let x = b.x + 16; x < b.x + b.w - 12; x += 10){ ctx.beginPath(); ctx.moveTo(x, C.y - 22); ctx.lineTo(x + 8, C.y - 30); ctx.stroke(); }
+    ctx.restore(); text(ctx, 'wall', b.x + b.w - 14, C.y - 34, {align:'right'});
+  }
+  const before_ = t < TC;
+  const pos = before_ ? P(-cfg.u[0]*(TC - t), -cfg.u[1]*(TC - t)) : P(cfg.v[0]*(t - TC), cfg.v[1]*(t - TC));
+  // trail
+  ctx.save(); ctx.strokeStyle = css('--muted'); ctx.globalAlpha = 0.45; ctx.setLineDash([3,5]); ctx.lineWidth = 1.5;
+  const st = P(...before); ctx.beginPath(); ctx.moveTo(st[0], st[1]);
+  if (before_) ctx.lineTo(pos[0], pos[1]); else { ctx.lineTo(C.x, C.y); ctx.lineTo(pos[0], pos[1]); }
+  ctx.stroke(); ctx.restore();
+  const vel = before_ ? cfg.u : cfg.v, vm = Math.hypot(...vel);
+  const al = 62;
+  dot(ctx, pos[0], pos[1], 11, css('--objA'), '');
+  arrow2(ctx, pos[0], pos[1], pos[0] + vel[0]/vm*al, pos[1] - vel[1]/vm*al, css('--vel'), `(${fmtV(...vel)})`, {side: cfg.labelSide || 1, off:16});
+  const dt = t - TC;
+  if (dt > -0.05 && dt < 0.9 && cfg.imp){
+    const im = Math.hypot(...cfg.imp); ctx.save(); ctx.globalAlpha = 1 - Math.max(0, dt)/0.9;
+    arrow2(ctx, C.x, C.y, C.x + cfg.imp[0]/im*58, C.y - cfg.imp[1]/im*58, css('--impulse'), cfg.impLabel, {w:3.5, side:-1, off:16});
+    ctx.restore();
+  }
+  text(ctx, before_ ? 'Before the impulse' : 'After the impulse', b.x + 10, b.y + b.h - 10, {weight:600, color:css('--ink')});
+  axesKey(ctx, b.x + b.w - 48, b.y + b.h - 14);
+}
+
+/* momentum triangle panel: a, then b nose to tail, then a + b */
+function drawTriangle(ctx, b, t, cfg){
+  panel(ctx, b, cfg.title || 'Momentum vectors');
+  const A = cfg.a, B = cfg.b, S = [A[0]+B[0], A[1]+B[1]];
+  const pts = [[0,0], A, S];
+  const xs = pts.map(p=>p[0]), ys = pts.map(p=>p[1]);
+  const minx = Math.min(...xs), maxx = Math.max(...xs), miny = Math.min(...ys), maxy = Math.max(...ys);
+  const pad = 34, bw = b.w - 2*pad, bh = b.h - 2*pad - 16;
+  const s = Math.min(bw/Math.max(maxx-minx, 1e-6), bh/Math.max(maxy-miny, 1e-6));
+  const ox = b.x + pad + (bw - (maxx-minx)*s)/2 - minx*s, oy = b.y + pad + 16 + (bh - (maxy-miny)*s)/2 + maxy*s;
+  const P = p => [ox + p[0]*s, oy - p[1]*s];
+  const O = P([0,0]), Ap = P(A), Sp = P(S);
+  const k1 = cfg.static ? 1 : ease(t/0.8), k2 = cfg.static ? 1 : ease((t - TC)/0.6), k3 = cfg.static ? 1 : ease((t - TC - 0.7)/0.6);
+  const lerp = (p, q, k) => [p[0] + (q[0]-p[0])*k, p[1] + (q[1]-p[1])*k];
+  const c1 = cfg.c1 || css('--vel'), c2 = cfg.c2 || css('--impulse'), c3 = css('--accent');
+  if (k1 > 0){ const e = lerp(O, Ap, k1); arrow2(ctx, O[0], O[1], e[0], e[1], c1, k1 > 0.95 ? cfg.la : null, {side: cfg.s1 || 1}); }
+  if (k2 > 0){ const e = lerp(Ap, Sp, k2); arrow2(ctx, Ap[0], Ap[1], e[0], e[1], c2, k2 > 0.95 ? cfg.lb : null, {side: cfg.s2 || 1, w:3}); }
+  if (k3 > 0){
+    let o0 = O, o1 = Sp;
+    if (cfg.offsetTotal){ const dx = Sp[0]-O[0], dy = Sp[1]-O[1], L = Math.hypot(dx,dy); const nx = dy/L*12, ny = -dx/L*12; o0 = [O[0]-nx, O[1]-ny]; o1 = [Sp[0]-nx, Sp[1]-ny]; }
+    const e = lerp(o0, o1, k3); arrow2(ctx, o0[0], o0[1], e[0], e[1], c3, k3 > 0.95 ? cfg.ls : null, {side: cfg.s3 || -1, w:3});
+  }
+  if (cfg.extra) cfg.extra(ctx, P, t, A, B);
+  if (!cfg.static && cfg.caption) text(ctx, t < TC ? cfg.caption[0] : cfg.caption[1], b.x + 10, b.y + b.h - 10, {weight:600, color:css('--ink')});
+}
+
+/* ---------- Example scenes ---------- */
+function scene(motionCfg, triCfg){
+  return (ctx, t, w, h) => { const {L, R} = layout(w, h); drawMotion(ctx, L, t, motionCfg); drawTriangle(ctx, R, t, triCfg); };
+}
+sims[8] = new Sim(8, $('#c8'), TT, scene(
+  {u:[10,-5], v:[25,-15], imp:[3,-2], impLabel:'I = 3i − 2j', cx:0.42, cy:0.42},
+  {a:[2,-1], b:[3,-2], la:'mu', lb:'I', ls:'mv', s1:-1, s2:-1, s3:1, caption:['Old momentum mu = 2i − j', '(2i − j) + (3i − 2j) = 5i − 3j']}));
+
+sims[9] = new Sim(9, $('#c9'), TT, scene(
+  {u:[10,5], v:[15,-7], imp:[0.85,-2.04], impLabel:'Q', cx:0.42, cy:0.45},
+  {a:[1.7,0.85], b:[0.85,-2.04], la:'mu', lb:'Q', ls:'mv', s1:-1, s2:1, s3:1, caption:['Old momentum mu = 1.7i + 0.85j', 'Q = 0.85i − 2.04j'],
+   extra:(ctx, P, t, A, B) => {
+     const k = ease((t - TC - 1.4)/0.6); if (k <= 0) return;
+     ctx.save(); ctx.globalAlpha = k;
+     const a = P(A), c = P([A[0]+B[0], A[1]]), e = P([A[0]+B[0], A[1]+B[1]]);
+     ctx.strokeStyle = css('--impulse'); ctx.setLineDash([4,4]); ctx.lineWidth = 1.5;
+     ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(c[0], c[1]); ctx.lineTo(e[0], e[1]); ctx.stroke(); ctx.setLineDash([]);
+     text(ctx, '0.85', (a[0]+c[0])/2, a[1] - 6, {align:'center', mono:true, color:css('--impulse'), weight:600});
+     text(ctx, '2.04', c[0] + 6, (c[1]+e[1])/2, {mono:true, color:css('--impulse'), weight:600});
+     const ang = Math.atan2(e[1]-a[1], e[0]-a[0]);
+     ctx.strokeStyle = css('--impulse'); ctx.beginPath(); ctx.arc(a[0], a[1], 18, 0, ang); ctx.stroke();
+     text(ctx, 'α', a[0] + 22, a[1] + 16, {mono:true, color:css('--impulse'), weight:700, size:13});
+     ctx.restore();
+   }}));
+
+sims[10] = new Sim(10, $('#c10'), TT, scene(
+  {u:[22,37], v:[10,-11], imp:[-0.3,-1.2], impLabel:'I', cx:0.5, cy:0.3, wall:true, labelSide:-1},
+  {a:[0.55,0.925], b:[-0.3,-1.2], la:'mu', lb:'I', ls:'mv', s1:-1, s2:-1, s3:1, caption:['Old momentum mu = 0.55i + 0.925j', 'I = −0.3i − 1.2j']}));
+
+/* Example 11: two bodies on one line, then they coalesce */
+sims[11] = new Sim(11, $('#c11'), TT, (ctx, t, w, h) => {
+  const {L, R} = layout(w, h);
+  panel(ctx, L, 'Motion (plan view)');
+  const C = {x: L.x + L.w*0.5, y: L.y + L.h*0.5};
+  const u1 = [20,-10], u2 = [16,-8], v = [17.5,-8.75];
+  const s = fitScale(C, [[-u1[0]*TC, -u1[1]*TC], [v[0]*(TT-TC), v[1]*(TT-TC)]], L, 40);
+  const d = [2/Math.sqrt(5), -1/Math.sqrt(5)], rA = 10, rB = 13, rC = 15;
+  const P = (x, y) => [C.x + x*s, C.y - y*s];
+  ctx.save(); ctx.strokeStyle = css('--muted'); ctx.globalAlpha = 0.4; ctx.setLineDash([3,5]);
+  const e1 = P(-u1[0]*TC, -u1[1]*TC), e2 = P(v[0]*(TT-TC), v[1]*(TT-TC)); ctx.beginPath(); ctx.moveTo(e1[0], e1[1]); ctx.lineTo(e2[0], e2[1]); ctx.stroke(); ctx.restore();
+  if (t < TC){
+    const pa = P(-u1[0]*(TC-t), -u1[1]*(TC-t)), pb = P(-u2[0]*(TC-t), -u2[1]*(TC-t));
+    pa[0] -= d[0]*rA; pa[1] -= -d[1]*rA; pb[0] += d[0]*rB; pb[1] += -d[1]*rB;
+    arrow2(ctx, pa[0], pa[1] - 22, pa[0] + d[0]*44, pa[1] - 22 - d[1]*44, css('--vel'), '(20i − 10j)', {side:-1});
+    arrow2(ctx, pb[0], pb[1] + 22, pb[0] + d[0]*38, pb[1] + 22 - d[1]*38, css('--p2'), '(16i − 8j)', {side:1});
+    dot(ctx, pa[0], pa[1], rA, css('--objA'), ''); dot(ctx, pb[0], pb[1], rB, css('--objB'), '');
+    text(ctx, '0.15 kg', pa[0] - 14, pa[1] + 24, {align:'right', mono:true}); text(ctx, '0.25 kg', pb[0] + 18, pb[1] - 16, {mono:true});
+  } else {
+    const pc = P(v[0]*(t-TC), v[1]*(t-TC));
+    arrow2(ctx, pc[0], pc[1] - 24, pc[0] + d[0]*44, pc[1] - 24 - d[1]*44, css('--accent'), '(17.5i − 8.75j)', {side:-1});
+    dot(ctx, pc[0], pc[1], rC, css('--objA'), '0.4');
+    if (t - TC < 0.6){ ctx.save(); ctx.globalAlpha = 1 - (t-TC)/0.6; text(ctx, 'COALESCE', C.x, C.y - 30, {align:'center', weight:700, color:css('--impulse'), size:13}); ctx.restore(); }
+  }
+  text(ctx, t < TC ? 'Before the collision' : 'After: one particle of mass 0.4 kg', L.x + 10, L.y + L.h - 10, {weight:600, color:css('--ink')});
+  axesKey(ctx, L.x + L.w - 48, L.y + L.h - 14);
+  drawTriangle(ctx, R, t < TC ? Math.min(t, TC - 0.01) : t, {a:[3,-1.5], b:[4,-2], la:'m₁u₁', lb:'m₂u₂', ls:'total',
+    c1:css('--vel'), c2:css('--p2'), s1:-1, s2:-1, s3:1, offsetTotal:true, title:'Momentum vectors', caption:['m₁u₁ = 3i − 1.5j', '(3i − 1.5j) + (4i − 2j) = 7i − 3.5j']});
+});
+
+/* ---------- predictions ---------- */
+function buildPredict(id, q, opts, correct, feedback){
+  const box = document.querySelector(`[data-predict="${id}"]`);
+  box.innerHTML = `<span class="lbl">PREDICT FIRST</span><div>${q}</div><div class="opts"></div><div class="fb" aria-live="polite"></div>`;
+  const o = box.querySelector('.opts'), fb = box.querySelector('.fb');
+  opts.forEach((t, i) => {
+    const b = document.createElement('button'); b.className = 'opt'; b.innerHTML = t;
+    b.onclick = () => {
+      o.querySelectorAll('.opt').forEach(x => x.classList.remove('right','wrong'));
+      b.classList.add(i === correct ? 'right' : 'wrong');
+      fb.innerHTML = (i === correct ? '<strong>Yes.</strong> ' : '<strong>Not quite.</strong> ') + feedback + ' Now press Play to watch it.';
+    };
+    o.append(b);
+  });
+}
+buildPredict(8, 'A student says the new velocity is simply (10i − 5j) + (3i − 2j) = 13i − 7j. Are they right?',
+  ['Yes', 'No: the impulse changes the momentum, not the velocity'], 1,
+  'The impulse is added to the momentum mu. You divide by the mass at the end, so the velocity changes by I ÷ m = 15i − 10j.');
+buildPredict(9, 'Before the impulse the puck moves up and to the right. Afterwards it moves down and to the right. Roughly which way must Q point?',
+  ['Up and to the right', 'Down and to the right', 'Down and to the left'], 1,
+  'The j part of the velocity drops from +5 to −7 and the i part rises from 10 to 15, so Q points down and to the right.');
+buildPredict(10, 'The j part of the ball\'s velocity goes from +37 to −11, and the i part from 22 to 10. Which way does the impulse from the wall mainly point?',
+  ['+j, into the wall', '−j, away from the wall', '+i, along the wall'], 1,
+  'The j part changes by 48 and the i part by only 12, so the impulse points mainly in the −j direction, back away from the wall.');
+buildPredict(11, 'The particles coalesce. Compared with their speeds before the collision, the speed of the combined particle is…',
+  ['faster than both', 'between the two', 'slower than both'], 1,
+  'Their momentum is shared, so the combined velocity is a weighted average of the two velocities and lies between them.');
+
+/* ---------- Stroud-style frames ---------- */
+function parseNum(s){
+  s = String(s).replace(/[−–]/g,'-').replace(/\s+/g,'').replace(/,/g,'.');
+  const m = s.match(/^(-?)\(?(-?\d*\.?\d+)\/(\d*\.?\d+)\)?$/);
+  if (m){ const v = parseFloat(m[2])/parseFloat(m[3]); return m[1] ? -v : v; }
+  if (s === '' || s === '-' || isNaN(Number(s))) return NaN;
+  return Number(s);
+}
+const N = (q, a, o={}) => Object.assign({type:'num', q, a, tol:0.011}, o);
+const V = (q, a, o={}) => Object.assign({type:'vec', q, a, tol:0.011}, o);
+const C = (q, opts, o={}) => Object.assign({type:'choice', q, opts}, o);
+const T = (q, o={}) => Object.assign({type:'info', q}, o);
+const FRAMES = {
+8: [
+  T('The impulse–momentum principle works exactly the same with vectors: <strong>I = mv − mu</strong>. Rearranged, <strong>mv = mu + I</strong>. You work with the i parts and the j parts separately.'),
+  V('Find the initial momentum mu = 0.2(10i − 5j).', [2,-1], {yes:'0.2 × 10 = 2 and 0.2 × (−5) = −1, so mu = 2i − j.',
+    wrong:[{v:[10,-5], msg:'That is still the velocity. Multiply each part by the mass, 0.2.'}, {v:[50,-25], msg:'You divided by 0.2. Momentum is mass × velocity, so multiply.'}, {v:[2,1], msg:'Check the sign of the j part: 0.2 × (−5) = −1.'}],
+    remedy:'Multiply both the i part and the j part by 0.2.', show:'2i − j'}),
+  V('The impulse is 3i − 2j. Find the new momentum mv = mu + I.', [5,-3], {yes:'(2 + 3)i + (−1 − 2)j = 5i − 3j.',
+    wrong:[{v:[1,-1], msg:'You worked out I − mu. The new momentum is the old momentum <em>plus</em> the impulse.'}, {v:[-1,1], msg:'You worked out mu − I. Add the impulse instead.'}, {v:[5,1], msg:'Check the j part: −1 + (−2) = −3.'}, {v:[5,-1], msg:'Check the j part: −1 + (−2) = −3.'}],
+    remedy:'Add the i parts together, then add the j parts together: (2 + 3)i + (−1 + (−2))j.', show:'5i − 3j'}),
+  V('So 0.2v = 5i − 3j. Find the new velocity v.', [25,-15], {unit:'m s⁻¹', yes:'5 ÷ 0.2 = 25 and −3 ÷ 0.2 = −15, so v = (25i − 15j) m s<sup>−1</sup>.',
+    wrong:[{v:[1,-0.6], msg:'You multiplied by 0.2. To undo "0.2 ×", divide each part by 0.2.'}, {v:[25,15], msg:'Check the sign of the j part: −3 ÷ 0.2 = −15.'}, {v:[5,-3], msg:'That is the momentum. Divide by the mass to get the velocity.'}],
+    remedy:'Divide each part by 0.2. Dividing by 0.2 is the same as multiplying by 5.', show:'(25i − 15j) m s<sup>−1</sup>'}),
+  C('Why are you allowed to deal with the i parts and the j parts separately?',
+    [{t:'Because i and j are perpendicular, so one cannot affect the other', ok:true},
+     {t:'Because the impulse is small', msg:'The size of the impulse does not matter. What matters is that i and j are at right angles to each other.'},
+     {t:'You are not allowed to: it is just a short cut', msg:'It is completely valid. i and j are perpendicular, so a change in one direction has no effect on the other.'}],
+    {hint:'Think about the directions of i and j. Does a push along i change anything along j?', yes:'A push along i only changes the i part of the momentum, and the same goes for j.'})
+],
+9: [
+  T('Use <strong>Q = mv − mu</strong> with m = 0.17, u = 10i + 5j and v = 15i − 7j. It is neatest to find v − u first, then multiply by 0.17.'),
+  V('Find v − u = (15i − 7j) − (10i + 5j).', [5,-12], {yes:'(15 − 10)i + (−7 − 5)j = 5i − 12j.',
+    wrong:[{v:[-5,12], msg:'You worked out u − v. The change is final minus initial: v − u.'}, {v:[5,-2], msg:'Check the j part: −7 − 5 = −12, not −2.'}, {v:[25,-2], msg:'You added the vectors. Subtract u from v.'}],
+    remedy:'Subtract the i parts, then subtract the j parts: (15 − 10)i + (−7 − 5)j.', show:'5i − 12j'}),
+  V('Now find Q = 0.17(5i − 12j).', [0.85,-2.04], {unit:'N s', yes:'Q = (0.85i − 2.04j) N s.',
+    remedy:'Multiply each part by 0.17.', show:'0.85i − 2.04j'}),
+  N('Find the magnitude |Q|, to 3 significant figures.', 2.21, {tol:0.006, unit:'N s', yes:'|Q| = √(0.85² + (−2.04)²) = √4.8841 = 2.21 N s.',
+    wrong:[{v:2.89, msg:'You added the components. The magnitude comes from Pythagoras: √(0.85² + (−2.04)²).'}, {v:1.19, msg:'You subtracted the components. Use Pythagoras: √(0.85² + (−2.04)²).'}, {v:4.88, msg:'That is |Q|². Take the square root.'}, {v:-1.19, msg:'Use Pythagoras: √(0.85² + (−2.04)²). A magnitude is never negative.'}],
+    remedy:'Sketch a right-angled triangle with sides 0.85 and 2.04. |Q| is the hypotenuse.', show:'2.21 N s'}),
+  N('Find the angle between Q and i, in degrees to 1 decimal place.', 67.4, {tol:0.06, unit:'°', yes:'tan α = 2.04 ÷ 0.85, so α = arctan(2.04 ÷ 0.85) = 67.4°.',
+    wrong:[{v:22.6, msg:'That is the angle between Q and j. For the angle with i, the opposite side is 2.04 and the adjacent side is 0.85.'}, {v:-67.4, msg:'An angle between two vectors is never negative. Use the sizes of the components: arctan(2.04 ÷ 0.85).'}, {v:1.18, msg:'Your calculator is in radians. Switch it to degrees.'}],
+    remedy:'In your triangle, the side along i is 0.85 and the side along j is 2.04. Use tan α = opposite ÷ adjacent.', show:'67.4°'}),
+  C('The j part of Q is negative. What does that tell you?',
+    [{t:'Q points below the i direction', ok:true},
+     {t:'The magnitude of Q is negative', msg:'A magnitude is never negative. The minus sign only tells you about the direction.'},
+     {t:'There must be a mistake', msg:'No mistake. Q points down and to the right, which matches the puck turning downwards.'}],
+    {hint:'Think of j as "up the page". What does a negative j part mean?', yes:'Q makes an angle of 67.4° with i, measured below it.'})
+],
+10: [
+  C('The impulse exerted by the wall on the squash ball equals the change in momentum of which body?',
+    [{t:'The squash ball', ok:true}, {t:'The wall', msg:'The wall is fixed, so its momentum does not change. The impulse on the ball equals the ball\'s change in momentum.'}],
+    {hint:'The impulse on a body equals the change in momentum of that same body.', yes:'So use I = mv − mu for the ball, with m = 0.025.'}),
+  V('Find v − u = (10i − 11j) − (22i + 37j).', [-12,-48], {yes:'(10 − 22)i + (−11 − 37)j = −12i − 48j.',
+    wrong:[{v:[12,48], msg:'You worked out u − v. The change is final minus initial: v − u.'}, {v:[-12,26], msg:'Check the j part: −11 − 37 = −48.'}, {v:[-12,-26], msg:'Check the j part: −11 − 37 = −48.'}, {v:[32,26], msg:'You added the vectors. Subtract u from v.'}],
+    remedy:'Subtract the i parts, then the j parts: (10 − 22)i + (−11 − 37)j.', show:'−12i − 48j'}),
+  V('Find the impulse I = 0.025(−12i − 48j).', [-0.3,-1.2], {unit:'N s', yes:'I = (−0.3i − 1.2j) N s.',
+    wrong:[{v:[-480,-1920], msg:'You divided by 0.025. Multiply each part by the mass.'}, {v:[0.3,1.2], msg:'Check the signs. Both parts of v − u are negative.'}],
+    remedy:'Multiply each part by 0.025. A quick way: 0.025 is one fortieth, so divide by 40.', show:'(−0.3i − 1.2j) N s'}),
+  C('The impulse is −0.3i − 1.2j. Which part is bigger, and what does that tell you?',
+    [{t:'The j part: the wall mainly pushes the ball back in the −j direction', ok:true},
+     {t:'The i part: the wall mainly pushes the ball sideways', msg:'1.2 is bigger than 0.3, so the j part dominates. The wall pushes the ball mostly back in the −j direction.'}],
+    {hint:'Compare the sizes of 0.3 and 1.2, ignoring the signs.', yes:'This matches the animation: the impulse points mainly back away from the wall.'})
+],
+11: [
+  T('The particles <strong>coalesce</strong>, so afterwards there is one particle of mass 0.4 kg with a single velocity v. Conservation of momentum becomes <strong>m₁u₁ + m₂u₂ = (m₁ + m₂)v</strong>.'),
+  V('Find the momentum of the first particle, 0.15(20i − 10j).', [3,-1.5], {unit:'N s', yes:'0.15 × 20 = 3 and 0.15 × (−10) = −1.5, so m₁u₁ = 3i − 1.5j.',
+    remedy:'Multiply each part by 0.15.', show:'3i − 1.5j'}),
+  V('Find the momentum of the second particle, 0.25(16i − 8j).', [4,-2], {unit:'N s', yes:'0.25 × 16 = 4 and 0.25 × (−8) = −2, so m₂u₂ = 4i − 2j.',
+    remedy:'Multiply each part by 0.25, which is the same as dividing by 4.', show:'4i − 2j'}),
+  V('Find the total momentum before the collision.', [7,-3.5], {unit:'N s', yes:'(3 + 4)i + (−1.5 − 2)j = 7i − 3.5j.',
+    wrong:[{v:[7,-0.5], msg:'Check the j part: −1.5 + (−2) = −3.5.'}, {v:[-1,0.5], msg:'You subtracted. Total momentum means adding the two momenta.'}],
+    remedy:'Add the i parts, then add the j parts.', show:'7i − 3.5j'}),
+  V('So 0.4v = 7i − 3.5j. Find v.', [17.5,-8.75], {unit:'m s⁻¹', yes:'7 ÷ 0.4 = 17.5 and −3.5 ÷ 0.4 = −8.75, so v = (17.5i − 8.75j) m s<sup>−1</sup>.',
+    wrong:[{v:[2.8,-1.4], msg:'You multiplied by 0.4. Divide each part by 0.4.'}, {v:[7,-3.5], msg:'That is the momentum. Divide by the combined mass, 0.4 kg.'}],
+    remedy:'Divide each part by 0.4.', show:'(17.5i − 8.75j) m s<sup>−1</sup>'}),
+  C('Look at 20i − 10j, 16i − 8j, and 17.5i − 8.75j. What do they have in common?',
+    [{t:'Each is a multiple of 2i − j, so they are all parallel', ok:true},
+     {t:'They all have the same magnitude', msg:'Their magnitudes are different. Look at the ratio of the i part to the j part in each one.'},
+     {t:'Nothing in particular', msg:'Look at the ratio of the i part to the j part: it is −2 every time.'}],
+    {hint:'Divide the i part by the j part for each vector.', yes:'All the motion is along one line, so this is a direct impact. Impacts at an angle (oblique impact) come later, in Chapter 5.'})
+]
+};
+
+function vecInputs(id){ return `<span class="vecin">(<input aria-label="i part" id="${id}i" inputmode="decimal" autocomplete="off"><b>i</b> +<input aria-label="j part" id="${id}j" inputmode="decimal" autocomplete="off"><b>j</b>)</span>`; }
+
+function buildWork(id, steps){
+  const box = document.querySelector(`[data-work="${id}"]`);
+  const frames = FRAMES[id];
+  box.innerHTML = `<div class="fhead"><h3>Work through it, frame by frame</h3><button class="btn" data-restart>Start again</button></div>
+    <div class="fprog" aria-hidden="true"><span></span></div><div class="frames"></div>
+    <div class="summary" hidden><h3>Revision summary</h3><p class="hint">Here is the full solution, set out as you would write it in an exam.</p><div class="sumsteps"></div></div>`;
+  const list = box.querySelector('.frames'), bar = box.querySelector('.fprog span'), sum = box.querySelector('.summary');
+  sum.querySelector('.sumsteps').innerHTML = steps.map(s => `<div class="step">${s.say?`<p>${s.say}</p>`:''}${s.math?`<div class="math">${s.math}</div>`:''}${s.ans?`<div class="answer">${s.ans}</div>`:''}${s.note?`<div class="note ${s.kind||''}">${s.note}</div>`:''}</div>`).join('');
+  let cur = 0;
+  const prog = () => { bar.style.width = (cur/frames.length*100) + '%'; };
+  const done = (el, html) => {
+    el.classList.remove('active'); el.classList.add('done');
+    el.querySelectorAll('input,button.check,button.opt,button.go,button.reveal,button.unsure').forEach(b => b.disabled = true);
+    if (html){ const c = document.createElement('div'); c.className = 'confirm'; c.innerHTML = html; el.append(c); }
+    cur++; prog();
+    if (cur < frames.length) show(cur);
+    else { sum.hidden = false; const f = document.createElement('div'); f.className = 'finish'; f.innerHTML = '<strong>Programme complete.</strong> Read through the summary below.'; list.append(f); }
+  };
+  function show(i){
+    const f = frames[i], el = document.createElement('div'), fid = `f${id}_${i}`;
+    el.className = 'frame active fresh';
+    let body = `<div class="fnum">Frame ${i+1} of ${frames.length}</div><div class="fq">${f.q}</div>`;
+    if (f.type === 'info') body += `<div class="fact"><button class="btn primary go">Continue</button></div>`;
+    if (f.type === 'num') body += `<div class="fact"><input aria-label="Your answer for frame ${i+1}" id="${fid}" inputmode="decimal" autocomplete="off"><span class="unit">${f.unit||''}</span><button class="btn primary check">Check</button><button class="btn unsure">Not sure</button></div>`;
+    if (f.type === 'vec') body += `<div class="fact">${vecInputs(fid)}<span class="unit">${f.unit||''}</span><button class="btn primary check">Check</button><button class="btn unsure">Not sure</button></div>`;
+    if (f.type === 'choice') body += `<div class="opts">${f.opts.map((o,k) => `<button class="opt" data-k="${k}">${o.t}</button>`).join('')}</div><div class="fact"><button class="btn unsure">Not sure</button></div>`;
+    body += `<div class="remedy" hidden aria-live="polite"></div>`;
+    el.innerHTML = body; list.append(el);
+    const rem = el.querySelector('.remedy'); let tries = 0;
+    const answerText = () => f.type === 'choice' ? f.opts.find(o => o.ok).t : f.show;
+    const wrong = msg => {
+      tries++; rem.hidden = false; rem.classList.remove('nudge');
+      rem.innerHTML = `<strong>Go back a step.</strong> ${msg}` + (tries >= 2 ? ` <button class="btn reveal">Show me the answer</button>` : '');
+      const r = rem.querySelector('.reveal'); if (r) r.onclick = () => done(el, `Answer: <strong>${answerText()}</strong>. ${f.yes||''}`);
+    };
+    if (f.type === 'info') el.querySelector('.go').onclick = () => done(el);
+    const un = el.querySelector('.unsure');
+    if (un){
+      let asked = 0;
+      un.onclick = () => {
+        asked++;
+        if (asked === 1){
+          rem.hidden = false; rem.classList.add('nudge');
+          rem.innerHTML = `<strong>Here is a nudge.</strong> ${f.hint || f.remedy || ''} Now try the frame again.`;
+          un.textContent = 'Still not sure';
+          const i2 = el.querySelector('input'); if (i2) i2.focus({preventScroll:true});
+        } else { rem.hidden = true; done(el, `Answer: <strong>${answerText()}</strong>. ${f.yes||''}`); }
+      };
+    }
+    if (f.type === 'num' || f.type === 'vec'){
+      const inputs = [...el.querySelectorAll('input')], chk = el.querySelector('.check');
+      const go = () => {
+        const xs = inputs.map(x => parseNum(x.value));
+        if (xs.some(isNaN)){ rem.hidden = false; rem.classList.remove('nudge'); rem.innerHTML = f.type === 'vec' ? 'Fill in both boxes. Type 0 if a part is zero, and put any minus sign inside the box.' : 'Type a number first. You can use a minus sign, a decimal, or a fraction.'; return; }
+        const target = f.type === 'vec' ? f.a : [f.a];
+        if (xs.every((x, k) => Math.abs(x - target[k]) <= f.tol)){ rem.hidden = true; done(el, `✓ ${f.yes||''}`); return; }
+        const w = (f.wrong||[]).find(w => { const wv = Array.isArray(w.v) ? w.v : [w.v]; return xs.every((x, k) => Math.abs(x - wv[k]) <= 0.011); });
+        if (!w && f.type === 'vec'){
+          const okI = Math.abs(xs[0] - f.a[0]) <= f.tol, okJ = Math.abs(xs[1] - f.a[1]) <= f.tol;
+          if (okI && !okJ) return wrong('Your i part is right. Check the j part again. ' + (f.remedy || ''));
+          if (okJ && !okI) return wrong('Your j part is right. Check the i part again. ' + (f.remedy || ''));
+        }
+        wrong(w ? w.msg : (f.remedy || 'Have another look and try again.'));
+      };
+      chk.onclick = go;
+      inputs.forEach(inp => inp.addEventListener('keydown', e => { if (e.key === 'Enter') go(); }));
+      if (i > 0) inputs[0].focus({preventScroll:true});
+    }
+    if (f.type === 'choice'){
+      el.querySelectorAll('.opt').forEach(b => b.onclick = () => {
+        const o = f.opts[+b.dataset.k];
+        el.querySelectorAll('.opt').forEach(x => x.classList.remove('wrong'));
+        if (o.ok){ b.classList.add('right'); rem.hidden = true; done(el, `✓ ${f.yes||''}`); }
+        else { b.classList.add('wrong'); wrong(o.msg); }
+      });
+    }
+    if (i > 0) el.scrollIntoView({block:'nearest', behavior: reduced ? 'auto' : 'smooth'});
+  }
+  box.querySelector('[data-restart]').onclick = () => { list.innerHTML = ''; sum.hidden = true; cur = 0; prog(); show(0); };
+  prog(); show(0);
+}
+
+buildWork(8, [
+  {say:'Let the velocity of the particle after the impulse be v m s<sup>−1</sup>.', math:'Change in momentum = 0.2v − 0.2(10i − 5j) N s'},
+  {say:'By the impulse–momentum principle this equals the impulse.', math:'0.2v − 0.2(10i − 5j) = 3i − 2j<br>0.2v = 3i − 2j + 2i − j<br>= 5i − 3j', note:'Use mv − mu = I, substituting m = 0.2, u = 10i − 5j and I = 3i − 2j.'},
+  {math:'v = 25i − 15j', ans:'The new velocity is (25i − 15j) m s<sup>−1</sup>.', note:'Make v the subject by dividing by 0.2.'}
+]);
+buildWork(9, [
+  {math:'Impulse = change in momentum<br>Q = mv − mu<br>Q = 0.17(15i − 7j) − 0.17(10i + 5j)<br>= 0.17(5i − 12j)<br>= 0.85i − 2.04j', note:'Substitute m = 0.17, u = 10i + 5j and v = 15i − 7j.'},
+  {math:'|Q| = √(0.85² + (−2.04)²)<br>= √4.8841<br>= 2.21', ans:'|Q| = 2.21 N s', note:'Use Pythagoras\' theorem to find the magnitude.'},
+  {math:'α = arctan(2.04 ÷ 0.85)', ans:'The angle between Q and i is 67.4° (1 d.p.).', note:'Use trigonometry on the right-angled triangle with sides 0.85 and 2.04.'}
+]);
+buildWork(10, [
+  {math:'Impulse = mv − mu<br>= 0.025((10i − 11j) − (22i + 37j))<br>= 0.025(−12i − 48j)', note:'The impulse exerted by the wall on the squash ball is equal to the change in momentum of the ball.'},
+  {ans:'Impulse = (−0.3i − 1.2j) N s'}
+]);
+buildWork(11, [
+  {math:'m₁u₁ + m₂u₂ = m₁v₁ + m₂v₂<br>0.15(20i − 10j) + 0.25(16i − 8j) = 0.4v', note:'This is the vector form of the conservation of momentum equation. After the impact v₁ = v₂ = v, so the right-hand side becomes (m₁ + m₂)v.'},
+  {math:'3i − 1.5j + 4i − 2j = 0.4v<br>7i − 3.5j = 0.4v<br>v = 17.5i − 8.75j', ans:'The velocity of the combined particle is (17.5i − 8.75j) m s<sup>−1</sup>.'},
+  {note:'All the velocity vectors are parallel, so this is a direct impact. Oblique impact is covered in Chapter 5.', kind:'solve'}
+]);
+
+/* ---------- Lab ---------- */
+function updLab(){
+  const m = +$('#lm').value, ui = +$('#lui').value, uj = +$('#luj').value, ii = +$('#lii').value, ij = +$('#lij').value;
+  $('#lmo').textContent = `${fmt(m,1)} kg`; $('#luio').textContent = fmt(ui,1); $('#lujo').textContent = fmt(uj,1);
+  $('#liio').textContent = fmt(ii,1); $('#lijo').textContent = fmt(ij,1);
+  const mu = [m*ui, m*uj], mv = [mu[0]+ii, mu[1]+ij], v = [mv[0]/m, mv[1]/m];
+  $('#lmu').textContent = fmtV(...mu); $('#lI').textContent = fmtV(ii, ij); $('#lmv').textContent = fmtV(...mv);
+  $('#lv').textContent = `${fmtV(...v)} m s⁻¹`; $('#lsp').textContent = `${fmt(Math.hypot(...v),2)} m s⁻¹`;
+  const {ctx, w, h} = fit($('#cL')); ctx.clearRect(0, 0, w, h);
+  const {L, R} = layout(w, h);
+  // left: velocities before and after from one point
+  panel(ctx, L, 'Velocities');
+  const Cp = {x: L.x + L.w/2, y: L.y + L.h/2 + 8};
+  const vmax = Math.max(Math.hypot(ui, uj), Math.hypot(...v), 0.5), sc = Math.min(L.w, L.h - 40)*0.42/vmax;
+  if (Math.hypot(ui, uj) > 0) arrow2(ctx, Cp.x, Cp.y, Cp.x + ui*sc, Cp.y - uj*sc, css('--vel'), `u = ${fmtV(ui, uj)}`, {side:1});
+  if (Math.hypot(...v) > 0) arrow2(ctx, Cp.x, Cp.y, Cp.x + v[0]*sc, Cp.y - v[1]*sc, css('--accent'), `v = ${fmtV(...v)}`, {side:-1, w:3});
+  dot(ctx, Cp.x, Cp.y, 8, css('--objA'), '');
+  axesKey(ctx, L.x + L.w - 48, L.y + L.h - 14);
+  if (Math.hypot(...mu) < 1e-9 || Math.hypot(ii, ij) < 1e-9){
+    panel(ctx, R, 'Momentum vectors'); text(ctx, 'Give both u and I a non-zero size to see the triangle.', R.x + R.w/2, R.y + R.h/2, {align:'center'});
+  } else {
+    drawTriangle(ctx, R, 99, {a:mu, b:[ii, ij], la:'mu', lb:'I', ls:'mv', s1:-1, s2:1, s3:-1, static:true});
+  }
+}
+['#lm','#lui','#luj','#lii','#lij'].forEach(s => $(s).addEventListener('input', updLab));
+
+/* ---------- Practice ---------- */
+const PQ = [
+  {q:'A particle of mass 0.5 kg is moving with velocity (4i + 2j) m s⁻¹ when it receives an impulse (3i − 4j) N s. Find its new velocity.', type:'vec', a:[10,-6], tol:0.011, unit:'m s⁻¹',
+   hint:'Find mu first, add the impulse to get mv, then divide by 0.5.', sol:'mu = 0.5(4i + 2j) = 2i + j<br>mv = (2i + j) + (3i − 4j) = 5i − 3j<br>v = (5i − 3j) ÷ 0.5 = (10i − 6j) m s⁻¹'},
+  {q:'A ball of mass 0.4 kg is moving with velocity (6i + 8j) m s⁻¹. After being hit, its velocity is (−3i + 2j) m s⁻¹. Find the magnitude of the impulse on the ball.', type:'num', a:4.33, tol:0.006, unit:'N s',
+   hint:'Find I = m(v − u) as a vector first, then use Pythagoras.', sol:'I = 0.4((−3i + 2j) − (6i + 8j)) = 0.4(−9i − 6j) = −3.6i − 2.4j<br>|I| = √(3.6² + 2.4²) = √18.72 = 4.33 N s (3 s.f.)'},
+  {q:'A particle of mass 2 kg moving with velocity (6i − 3j) m s⁻¹ collides with a particle of mass 3 kg moving with velocity (−2i + j) m s⁻¹. The particles coalesce. Find the velocity of the combined particle.', type:'vec', a:[1.2,-0.6], tol:0.011, unit:'m s⁻¹',
+   hint:'Total momentum before = (2 + 3)v.', sol:'2(6i − 3j) + 3(−2i + j) = 5v<br>12i − 6j − 6i + 3j = 5v<br>6i − 3j = 5v<br>v = (1.2i − 0.6j) m s⁻¹'},
+  {q:'A puck of mass 0.2 kg is moving with velocity 5i m s⁻¹ when it receives an impulse (−i + 2j) N s. Find the speed of the puck immediately afterwards.', type:'num', a:10, tol:0.011, unit:'m s⁻¹',
+   hint:'Find the new velocity as a vector, then its magnitude.', sol:'mu = 0.2 × 5i = i<br>mv = i + (−i + 2j) = 2j<br>v = 2j ÷ 0.2 = 10j, so the speed is 10 m s⁻¹'}
+];
+const solved = new Set(), pbox = $('#pqs');
+PQ.forEach((p, i) => {
+  const d = document.createElement('div'); d.className = 'pq';
+  const inp = p.type === 'vec' ? vecInputs('pa'+i) : `<input id="pa${i}" aria-label="Answer to question ${i+1}" inputmode="decimal" autocomplete="off">`;
+  d.innerHTML = `<div class="num">${i+1}</div><div class="body"><p>${p.q}</p>
+    <div class="ansrow">${inp}<span class="unit">${p.unit}</span>
+    <button class="btn primary" data-chk="${i}">Check</button><button class="btn" data-hint="${i}">Hint</button><button class="btn" data-sol="${i}">Show solution</button>
+    <span class="res" id="pr${i}" aria-live="polite"></span></div>
+    <div class="note solve" id="ph${i}" hidden>${p.hint}</div><div class="sol" id="ps${i}">${p.sol}</div></div>`;
+  pbox.append(d);
+});
+const score = () => { $('#score').textContent = `${solved.size} of ${PQ.length} correct`; };
+pbox.addEventListener('click', e => {
+  const c = e.target.closest('[data-chk]'), h = e.target.closest('[data-hint]'), s = e.target.closest('[data-sol]');
+  if (c){
+    const i = +c.dataset.chk, p = PQ[i], r = $('#pr'+i);
+    const xs = p.type === 'vec' ? [parseNum($(`#pa${i}i`).value), parseNum($(`#pa${i}j`).value)] : [parseNum($('#pa'+i).value)];
+    const target = p.type === 'vec' ? p.a : [p.a];
+    if (xs.some(isNaN)){ r.className = 'res no'; r.textContent = p.type === 'vec' ? 'Fill in both boxes.' : 'Type a number first.'; return; }
+    if (xs.every((x, k) => Math.abs(x - target[k]) <= p.tol)){ r.className = 'res ok'; r.textContent = 'Correct ✓'; solved.add(i); }
+    else if (p.type === 'num' && Math.abs(Math.abs(xs[0]) - p.a) <= p.tol){ r.className = 'res no'; r.textContent = 'Right size, but a speed or magnitude is never negative.'; }
+    else if (p.type === 'vec' && xs.some((x, k) => Math.abs(x - target[k]) <= p.tol)){ r.className = 'res no'; r.textContent = 'One part is right. Check the other.'; }
+    else { r.className = 'res no'; r.textContent = 'Not yet. Check your signs, then try the hint.'; }
+    score();
+  }
+  if (h){ const n = $('#ph'+h.dataset.hint); n.hidden = !n.hidden; }
+  if (s){ const n = $('#ps'+s.dataset.sol); n.classList.toggle('show'); s.textContent = n.classList.contains('show') ? 'Hide solution' : 'Show solution'; }
+});
+pbox.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('input')){ const i = e.target.id.match(/\d+/)[0]; pbox.querySelector(`[data-chk="${i}"]`).click(); } });
+score();
+
+/* ---------- redraw ---------- */
+function redrawAll(){ Object.values(sims).forEach(s => s.render()); updLab(); }
+window.addEventListener('resize', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redrawAll);
+updLab();
+if (document.fonts) document.fonts.ready.then(redrawAll);
+
+</script>
+</body>
+</html>
