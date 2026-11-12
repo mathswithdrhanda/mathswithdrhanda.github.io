@@ -191,6 +191,9 @@ footer{margin-top:24px;padding-top:16px;border-top:1px solid var(--line);color:v
 @media (prefers-reduced-motion: reduce){
   .step.fresh{animation:none}
 }
+
+.opt.chosen{border-color:var(--accent);background:var(--accent-soft);font-weight:600}
+.opt:disabled{cursor:default;opacity:1}
 </style>
 </head>
 <body>
@@ -439,6 +442,46 @@ footer{margin-top:24px;padding-top:16px;border-top:1px solid var(--line);color:v
 </div>
 
 <script>
+
+/* ---------- predict, solve, then check ---------- */
+const SOLVED = new Set();
+const isSolved = id => SOLVED.has(String(id));
+const PRED = {};
+function lockOverlay(ctx, w, h){
+  const st = getComputedStyle(document.documentElement);
+  const bh = 58, y = h - bh - 6;
+  ctx.save(); ctx.globalAlpha = 0.93; ctx.fillStyle = st.getPropertyValue('--surface').trim(); ctx.fillRect(12, y, w - 24, bh);
+  ctx.globalAlpha = 1; ctx.strokeStyle = st.getPropertyValue('--accent').trim(); ctx.lineWidth = 1.5; ctx.strokeRect(12, y, w - 24, bh);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = st.getPropertyValue('--ink').trim();
+  ctx.font = `700 16px ${st.getPropertyValue('--display').split(',')[0]}, sans-serif`; ctx.fillText('What happens next?', w/2, y + 20);
+  ctx.fillStyle = st.getPropertyValue('--muted').trim(); ctx.font = `500 13px ${st.getPropertyValue('--body').split(',')[0]}, sans-serif`;
+  ctx.fillText('Work it out in the frames. The rest of the animation unlocks when you finish.', w/2, y + 40);
+  ctx.restore();
+}
+function markSolved(id){
+  SOLVED.add(String(id));
+  if (sims[id]) sims[id].reset();
+  if (PRED[id]) PRED[id].reveal();
+}
+function buildPredict(id, q, opts, correct, feedback){
+  const box = document.querySelector(`[data-predict="${id}"]`);
+  box.innerHTML = `<span class="lbl">PREDICT FIRST</span><div>${q}</div><div class="opts"></div><div class="fb" aria-live="polite"></div>`;
+  const o = box.querySelector('.opts'), fb = box.querySelector('.fb');
+  let choice = null;
+  const btns = opts.map((t, i) => {
+    const b = document.createElement('button'); b.className = 'opt'; b.innerHTML = t;
+    b.onclick = () => {
+      if (isSolved(id)) return;
+      choice = i; btns.forEach(x => x.classList.remove('chosen')); b.classList.add('chosen');
+      fb.innerHTML = '<strong>Prediction saved.</strong> Press Play to watch the set-up, then work through the frames to find out whether you were right.';
+    };
+    o.append(b); return b;
+  });
+  PRED[id] = { reveal(){
+    btns.forEach((b, i) => { b.classList.remove('chosen'); if (i === correct) b.classList.add('right'); else if (i === choice) b.classList.add('wrong'); b.disabled = true; });
+    fb.innerHTML = (choice === null ? '<strong>The answer:</strong> ' : choice === correct ? '<strong>Your prediction was right.</strong> ' : '<strong>Your prediction was not right this time.</strong> ') + feedback + ' Press Play to watch the full answer.';
+  }};
+}
 /* ---------- helpers ---------- */
 const $ = s => document.querySelector(s);
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -491,22 +534,23 @@ function text(ctx, s, x, y, o={}){
 /* ---------- animation engine ---------- */
 const sims = {};
 class Sim{
+  get end(){ return (this.stopAt != null && !isSolved(this.id)) ? this.stopAt : this.T; }
   constructor(id, canvas, duration, draw){
     this.id=id; this.c=canvas; this.T=duration; this.drawFn=draw; this.t=0; this.running=false; this.last=0;
     this.render();
   }
-  render(){ const {ctx,w,h} = fit(this.c); ctx.clearRect(0,0,w,h); this.drawFn(ctx, this.t, w, h); }
+  render(){ const {ctx,w,h} = fit(this.c); ctx.clearRect(0,0,w,h); this.drawFn(ctx, this.t, w, h); if (this.stopAt != null && !isSolved(this.id) && this.t >= this.stopAt - 1e-6) lockOverlay(ctx, w, h); }
   play(){
-    if (this.t >= this.T) this.t = 0;
-    if (reduced){ this.t = this.T; this.render(); return; }
+    if (this.t >= this.end) this.t = 0;
+    if (reduced){ this.t = this.end; this.render(); return; }
     this.running = true; this.last = performance.now();
     const step = now => {
       if (!this.running) return;
       const rate = $('#slowmo').checked ? 0.3 : 1;
       this.t += (now - this.last)/1000 * rate; this.last = now;
-      if (this.t >= this.T){
+      if (this.t >= this.end){
         if ($('#loopall').checked){ this.t = 0; }
-        else { this.t = this.T; this.running = false; this.render(); this.btn(); return; }
+        else { this.t = this.end; this.running = false; this.render(); this.btn(); return; }
       }
       this.render(); requestAnimationFrame(step);
     };
@@ -514,7 +558,7 @@ class Sim{
   }
   pause(){ this.running=false; this.btn(); }
   reset(){ this.running=false; this.t=0; this.render(); this.btn(); }
-  btn(){ const b = document.querySelector(`[data-play="${this.id}"]`); if (b) b.textContent = this.running ? '❚❚ Pause' : (this.t >= this.T ? '↻ Replay' : '▶ Play'); }
+  btn(){ const b = document.querySelector(`[data-play="${this.id}"]`); if (b) b.textContent = this.running ? '❚❚ Pause' : (this.t >= this.end ? '↻ Replay' : '▶ Play'); }
 }
 document.addEventListener('click', e => {
   const p = e.target.closest('[data-play]'); if (p){ const s = sims[p.dataset.play]; s.running ? s.pause() : s.play(); }
@@ -558,6 +602,7 @@ function collisionDraw(cfg){
     }
     const pTot = A.m*velA + B.m*velB;
     text(ctx, before ? 'Before the collision' : 'After the collision', 12, 20, {weight:600, color:css('--ink'), size:13});
+    if (g.id && !isSolved(g.id)) return;
     text(ctx, `Total momentum (→ positive): ${fmt(pTot)} N s`, 12, h - 12, {mono:true, color:css('--accent'), weight:600});
     text(ctx, `${A.name}: ${fmt(A.m*velA)}   ${B.name}: ${fmt(B.m*velB)}`, w - 12, h - 12, {mono:true, align:'right'});
   };
@@ -741,7 +786,7 @@ function buildWork(id, steps){
     el.querySelectorAll('input,button.check,button.opt,button.go,button.reveal,button.unsure').forEach(b => b.disabled = true);
     if (html){ const c = document.createElement('div'); c.className = 'confirm'; c.innerHTML = html; el.append(c); }
     cur++; prog();
-    if (cur < frames.length) show(cur); else { sum.hidden = false; const f = document.createElement('div'); f.className='finish'; f.innerHTML = '<strong>Programme complete.</strong> Read through the summary below.'; list.append(f); }
+    if (cur < frames.length) show(cur); else { sum.hidden = false; const f = document.createElement('div'); f.className='finish'; f.innerHTML = '<strong>Programme complete.</strong> The full animation is now unlocked: press Play to check your answer, then read the summary below.'; list.append(f); markSolved(id); }
   };
   function show(i){
     const f = frames[i], el = document.createElement('div');
@@ -802,20 +847,6 @@ function buildWork(id, steps){
   prog(); show(0);
 }
 
-function buildPredict(id, q, opts, correct, feedback){
-  const box = document.querySelector(`[data-predict="${id}"]`);
-  box.innerHTML = `<span class="lbl">PREDICT FIRST</span><div>${q}</div><div class="opts"></div><div class="fb" aria-live="polite"></div>`;
-  const o = box.querySelector('.opts'), fb = box.querySelector('.fb');
-  opts.forEach((t,i) => {
-    const b = document.createElement('button'); b.className='opt'; b.innerHTML = t;
-    b.onclick = () => {
-      o.querySelectorAll('.opt').forEach(x => x.classList.remove('right','wrong'));
-      b.classList.add(i===correct ? 'right' : 'wrong');
-      fb.innerHTML = (i===correct ? '<strong>Yes.</strong> ' : '<strong>Not quite.</strong> ') + feedback + ' Press Play to watch it.';
-    };
-    o.append(b);
-  });
-}
 
 /* ---------- Momentum calculator ---------- */
 function updMomentum(){
@@ -855,7 +886,8 @@ sims[1] = new Sim(1, $('#c1'), 3, (ctx,t,w,h) => {
   // bars
   const bx = lane + 20, bw = w - bx - 16;
   text(ctx, 'Momentum', bx, 18, {weight:600, color:css('--ink')});
-  rows.forEach(r => {
+  if (!isSolved(1)) text(ctx, '? N s', bx, 40, {mono:true, weight:600, color:css('--accent')});
+  else rows.forEach(r => {
     const len = Math.max(2, bw * (r.p/1500) * k);
     ctx.fillStyle = css('--accent'); ctx.fillRect(bx, r.y-6, len, 16);
     text(ctx, `${fmt(r.p*k, 1)} N s`, bx, r.y + 30, {mono:true, weight:600, color:css('--accent')});
@@ -903,18 +935,18 @@ sims[2] = new Sim(2, $('#c2'), 7, (ctx,t,w,h) => {
   ctx.fillRect(bx, trackY-18, 44, 36); ctx.strokeRect(bx, trackY-18, 44, 36);
   ctx.fillStyle = '#14232e'; ctx.font = `700 13px ${css('--body').split(',')[0]}`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('2 kg', bx+22, trackY); ctx.restore();
   if (t < 6) arrow(ctx, bx+46, trackY, bx+100, css('--impulse'), '4.5 N', {w:3});
-  if (v > 0.01) arrow(ctx, bx+22 - Math.min(60,v*4)/2, trackY-36, bx+22 + Math.min(60,v*4)/2, css('--vel'), `${fmt(v,1)} m s⁻¹`);
+  if (v > 0.01) arrow(ctx, bx+22 - Math.min(60,v*4)/2, trackY-36, bx+22 + Math.min(60,v*4)/2, css('--vel'), isSolved(2) ? `${fmt(v,1)} m s⁻¹` : 'v = ?');
   text(ctx, `t = ${fmt(tt,1)} s`, 12, 20, {mono:true, weight:600, color:css('--ink'), size:13});
-  text(ctx, t >= 6 ? 'Force stops: the body keeps moving at 13.5 m s⁻¹' : 'Force acting', w-12, 20, {align:'right', weight:600, color:css('--ink')});
+  text(ctx, t >= 6 ? (isSolved(2) ? 'Force stops: the body keeps moving at 13.5 m s⁻¹' : 'Force stops: the body keeps moving at a constant speed') : 'Force acting', w-12, 20, {align:'right', weight:600, color:css('--ink')});
   // graph
   const L = 40, R = w - 20, Tp = h*0.62, B = h - 24, sxg = (R-L)/7, syg = (B-Tp)/6;
   ctx.strokeStyle = css('--line'); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L,Tp-6); ctx.lineTo(L,B); ctx.lineTo(R,B); ctx.stroke();
   ctx.fillStyle = css('--impulse-soft'); ctx.fillRect(L, B-4.5*syg, tt*sxg, 4.5*syg);
   ctx.strokeStyle = css('--impulse'); ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(L, B-4.5*syg); ctx.lineTo(L+6*sxg, B-4.5*syg); ctx.stroke();
-  text(ctx, `I = Ft = 4.5 × ${fmt(tt,1)} = ${fmt(4.5*tt,1)} N s`, L+8, Tp - 4, {mono:true, weight:600, color:css('--impulse'), size:13});
+  text(ctx, (isSolved(2) ? `I = Ft = 4.5 × ${fmt(tt,1)} = ${fmt(4.5*tt,1)} N s` : 'I = Ft = area under the graph'), L+8, Tp - 4, {mono:true, weight:600, color:css('--impulse'), size:13});
   text(ctx, '0', L, B+14, {align:'center', mono:true}); text(ctx, '6 s', L+6*sxg, B+14, {align:'center', mono:true});
   text(ctx, '4.5 N', L-4, B-4.5*syg+4, {align:'right', mono:true});
-  text(ctx, `momentum = 2 × ${fmt(v,2)} = ${fmt(2*v,1)} N s`, R, Tp - 4, {align:'right', mono:true, color:css('--accent'), weight:600});
+  if (isSolved(2)) text(ctx, `momentum = 2 × ${fmt(v,2)} = ${fmt(2*v,1)} N s`, R, Tp - 4, {align:'right', mono:true, color:css('--accent'), weight:600});
 });
 buildPredict(2, 'If the same force acted for 12 s instead of 6 s, the final speed would be…',
   ['the same', 'twice as big', 'four times as big'], 1,
@@ -943,7 +975,7 @@ sims[3] = new Sim(3, $('#c3'), 3.6, (ctx,t,w,h) => {
     arrow(ctx, wallX + 16, yb + 30, wallX + 70, css('--impulse'), 'I on wall', {below:true, w:3});
     ctx.restore(); }
   text(ctx, before ? 'Before: moving towards the wall' : 'After: rebounding', 12, 20, {weight:600, color:css('--ink'), size:13});
-  text(ctx, `momentum of ball (← positive): ${before ? '−0.7' : '0.5'} N s`, 12, h-12, {mono:true, color:css('--accent'), weight:600});
+  if (isSolved(3)) text(ctx, `momentum of ball (← positive): ${before ? '−0.7' : '0.5'} N s`, 12, h-12, {mono:true, color:css('--accent'), weight:600});
 });
 buildPredict(3, 'The ball arrives at 3.5 m s<sup>−1</sup> and leaves at 2.5 m s<sup>−1</sup>. How big is the change in its velocity?',
   ['1 m s<sup>−1</sup>', '6 m s<sup>−1</sup>', '0 m s<sup>−1</sup>'], 1,
@@ -965,7 +997,7 @@ buildEx3();
 /* ---------- Example 4 ---------- */
 sims[4] = new Sim(4, $('#c4'), 3.8, collisionDraw({
   A:{name:'P', m:2, u:3, v:-0.5, uL:'3 m s⁻¹', vL:'½ m s⁻¹'},
-  B:{name:'Q', m:3, u:0, v:7/3, uL:'0 m s⁻¹', vL:'7/3 m s⁻¹'}, impulse:'7 N s'}));
+  B:{name:'Q', m:3, u:0, v:7/3, uL:'0 m s⁻¹', vL:'7/3 m s⁻¹'}, impulse:'7 N s', id:4}));
 buildPredict(4, 'After the collision, what does P do?',
   ['Keeps moving forwards, more slowly', 'Stops dead', 'Bounces back the other way'], 2,
   'The working gives v = −½, and the minus sign means P has reversed.');
@@ -982,7 +1014,7 @@ buildWork(4, [
 /* ---------- Example 5 ---------- */
 sims[5] = new Sim(5, $('#c5'), 3.8, collisionDraw({
   A:{name:'A', m:2, u:3, v:-2, uL:'3 m s⁻¹', vL:'2 m s⁻¹'},
-  B:{name:'B', m:4, u:-2, v:0.5, uL:'2 m s⁻¹', vL:'0.5 m s⁻¹'}, impulse:'10 N s'}));
+  B:{name:'B', m:4, u:-2, v:0.5, uL:'2 m s⁻¹', vL:'0.5 m s⁻¹'}, impulse:'10 N s', id:5}));
 buildPredict(5, 'Before you calculate, guess: which way does B move after the collision?',
   ['B is reversed (moves →)', 'B carries on (moves ←)', 'B stops'], 0,
   'The answer comes out positive with → as positive, so a guess of "reversed" was correct.');
@@ -1019,7 +1051,7 @@ sims[6] = new Sim(6, $('#c6'), 4.2, (ctx,t,w,h) => {
     text(ctx, 'JERK', (xQ+xP)/2, yb - 14, {align:'center', weight:700, color:css('--impulse'), size:14});
     ctx.restore(); }
   text(ctx, t < tt ? 'String slack: only P moves' : 'String taut: both move together', 12, 20, {weight:600, color:css('--ink'), size:13});
-  text(ctx, `Total momentum (→ positive): ${fmt(2*vQ + 8*vP)} N s`, 12, h-12, {mono:true, color:css('--accent'), weight:600});
+  if (isSolved(6)) text(ctx, `Total momentum (→ positive): ${fmt(2*vQ + 8*vP)} N s`, 12, h-12, {mono:true, color:css('--accent'), weight:600});
 });
 buildPredict(6, 'Once the string is taut, which particle moves faster?',
   ['P', 'Q', 'They move at the same speed'], 2,
@@ -1036,7 +1068,7 @@ buildWork(6, [
 /* ---------- Example 7 ---------- */
 sims[7] = new Sim(7, $('#c7'), 3.8, collisionDraw({
   A:{name:'A', m:2, u:3, v:-0.5, uL:'3 m s⁻¹', vL:'0.5 m s⁻¹'},
-  B:{name:'B', m:4, u:-2, v:-0.25, uL:'2 m s⁻¹', vL:'0.25 m s⁻¹'}, impulse:'7 N s'}));
+  B:{name:'B', m:4, u:-2, v:-0.25, uL:'2 m s⁻¹', vL:'0.25 m s⁻¹'}, impulse:'7 N s', id:7}));
 buildPredict(7, 'There are three sensible guesses for the directions after the collision. Which actually happens?',
   ['A goes ←, B goes →', 'Both go →', 'Both go ←'], 2,
   'A comes out reversed, and B carries on in its original direction, more slowly.');
@@ -1048,6 +1080,8 @@ buildWork(7, [
   {ans:'The direction of motion of B is unchanged and its speed is 0.25 m s<sup>−1</sup>.', note:'The question asks for velocities, so state both the speed and the direction of motion.', kind:'watch'},
   {say:'Check with conservation of momentum (→ positive):', math:'Before: (2 × 3) + (4 × (−2)) = −2<br>After: (2 × (−0.5)) + (4 × (−0.25)) = −1 − 1 = −2 ✓'}
 ]);
+
+[4,5,6,7].forEach(k => { sims[k].stopAt = 1.55; });
 
 /* ---------- Collision lab ---------- */
 const lab = {A:{name:'A'}, B:{name:'B'}, impulse:'', never:false};

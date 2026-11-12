@@ -201,6 +201,9 @@ footer{margin-top:24px;padding-top:16px;border-top:1px solid var(--line);color:v
 .question b{font-weight:700}
 canvas.sim.tall{height:460px}
 #cL{height:360px}
+
+.opt.chosen{border-color:var(--accent);background:var(--accent-soft);font-weight:600}
+.opt:disabled{cursor:default;opacity:1}
 </style>
 </head>
 <body>
@@ -335,6 +338,46 @@ canvas.sim.tall{height:460px}
 </div>
 
 <script>
+
+/* ---------- predict, solve, then check ---------- */
+const SOLVED = new Set();
+const isSolved = id => SOLVED.has(String(id));
+const PRED = {};
+function lockOverlay(ctx, w, h){
+  const st = getComputedStyle(document.documentElement);
+  const bh = 58, y = h - bh - 6;
+  ctx.save(); ctx.globalAlpha = 0.93; ctx.fillStyle = st.getPropertyValue('--surface').trim(); ctx.fillRect(12, y, w - 24, bh);
+  ctx.globalAlpha = 1; ctx.strokeStyle = st.getPropertyValue('--accent').trim(); ctx.lineWidth = 1.5; ctx.strokeRect(12, y, w - 24, bh);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = st.getPropertyValue('--ink').trim();
+  ctx.font = `700 16px ${st.getPropertyValue('--display').split(',')[0]}, sans-serif`; ctx.fillText('What happens next?', w/2, y + 20);
+  ctx.fillStyle = st.getPropertyValue('--muted').trim(); ctx.font = `500 13px ${st.getPropertyValue('--body').split(',')[0]}, sans-serif`;
+  ctx.fillText('Work it out in the frames. The rest of the animation unlocks when you finish.', w/2, y + 40);
+  ctx.restore();
+}
+function markSolved(id){
+  SOLVED.add(String(id));
+  if (sims[id]) sims[id].reset();
+  if (PRED[id]) PRED[id].reveal();
+}
+function buildPredict(id, q, opts, correct, feedback){
+  const box = document.querySelector(`[data-predict="${id}"]`);
+  box.innerHTML = `<span class="lbl">PREDICT FIRST</span><div>${q}</div><div class="opts"></div><div class="fb" aria-live="polite"></div>`;
+  const o = box.querySelector('.opts'), fb = box.querySelector('.fb');
+  let choice = null;
+  const btns = opts.map((t, i) => {
+    const b = document.createElement('button'); b.className = 'opt'; b.innerHTML = t;
+    b.onclick = () => {
+      if (isSolved(id)) return;
+      choice = i; btns.forEach(x => x.classList.remove('chosen')); b.classList.add('chosen');
+      fb.innerHTML = '<strong>Prediction saved.</strong> Press Play to watch the set-up, then work through the frames to find out whether you were right.';
+    };
+    o.append(b); return b;
+  });
+  PRED[id] = { reveal(){
+    btns.forEach((b, i) => { b.classList.remove('chosen'); if (i === correct) b.classList.add('right'); else if (i === choice) b.classList.add('wrong'); b.disabled = true; });
+    fb.innerHTML = (choice === null ? '<strong>The answer:</strong> ' : choice === correct ? '<strong>Your prediction was right.</strong> ' : '<strong>Your prediction was not right this time.</strong> ') + feedback + ' Press Play to watch the full answer.';
+  }};
+}
 /* ---------- helpers ---------- */
 const $ = s => document.querySelector(s);
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -416,23 +459,24 @@ const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : 1 - Math.pow(1 - x, 3);
 const TC = 1.6, TT = 4.2;
 const sims = {};
 class Sim{
+  get end(){ return (this.stopAt != null && !isSolved(this.id)) ? this.stopAt : this.T; }
   constructor(id, canvas, duration, draw){ this.id=id; this.c=canvas; this.T=duration; this.drawFn=draw; this.t=0; this.running=false; this.render(); }
-  render(){ const {ctx,w,h} = fit(this.c); ctx.clearRect(0,0,w,h); this.drawFn(ctx, this.t, w, h); }
+  render(){ const {ctx,w,h} = fit(this.c); ctx.clearRect(0,0,w,h); this.drawFn(ctx, this.t, w, h); if (this.stopAt != null && !isSolved(this.id) && this.t >= this.stopAt - 1e-6) lockOverlay(ctx, w, h); }
   play(){
-    if (this.t >= this.T) this.t = 0;
-    if (reduced){ this.t = this.T; this.render(); this.btn(); return; }
+    if (this.t >= this.end) this.t = 0;
+    if (reduced){ this.t = this.end; this.render(); this.btn(); return; }
     this.running = true; this.last = performance.now();
     const step = now => {
       if (!this.running) return;
       this.t += (now - this.last)/1000 * ($('#slowmo').checked ? 0.3 : 1); this.last = now;
-      if (this.t >= this.T){ if ($('#loopall').checked) this.t = 0; else { this.t = this.T; this.running = false; this.render(); this.btn(); return; } }
+      if (this.t >= this.end){ if ($('#loopall').checked) this.t = 0; else { this.t = this.end; this.running = false; this.render(); this.btn(); return; } }
       this.render(); requestAnimationFrame(step);
     };
     requestAnimationFrame(step); this.btn();
   }
   pause(){ this.running = false; this.btn(); }
   reset(){ this.running = false; this.t = 0; this.render(); this.btn(); }
-  btn(){ const b = document.querySelector(`[data-play="${this.id}"]`); if (b) b.textContent = this.running ? '❚❚ Pause' : (this.t >= this.T ? '↻ Replay' : '▶ Play'); }
+  btn(){ const b = document.querySelector(`[data-play="${this.id}"]`); if (b) b.textContent = this.running ? '❚❚ Pause' : (this.t >= this.end ? '↻ Replay' : '▶ Play'); }
 }
 document.addEventListener('click', e => {
   const p = e.target.closest('[data-play]'); if (p){ const s = sims[p.dataset.play]; s.running ? s.pause() : s.play(); }
@@ -505,11 +549,11 @@ function scene(motionCfg, triCfg){
 }
 sims[8] = new Sim(8, $('#c8'), TT, scene(
   {u:[10,-5], v:[25,-15], imp:[3,-2], impLabel:'I = 3i − 2j', cx:0.42, cy:0.42},
-  {a:[2,-1], b:[3,-2], la:'mu', lb:'I', ls:'mv', s1:-1, s2:-1, s3:1, caption:['Old momentum mu = 2i − j', '(2i − j) + (3i − 2j) = 5i − 3j']}));
+  {a:[2,-1], b:[3,-2], la:'mu', lb:'I', ls:'mv', s1:-1, s2:-1, s3:1, caption:['Old momentum mu', '(2i − j) + (3i − 2j) = 5i − 3j']}));
 
 sims[9] = new Sim(9, $('#c9'), TT, scene(
   {u:[10,5], v:[15,-7], imp:[0.85,-2.04], impLabel:'Q', cx:0.42, cy:0.45},
-  {a:[1.7,0.85], b:[0.85,-2.04], la:'mu', lb:'Q', ls:'mv', s1:-1, s2:1, s3:1, caption:['Old momentum mu = 1.7i + 0.85j', 'Q = 0.85i − 2.04j'],
+  {a:[1.7,0.85], b:[0.85,-2.04], la:'mu', lb:'Q', ls:'mv', s1:-1, s2:1, s3:1, caption:['Old momentum mu', 'Q = 0.85i − 2.04j'],
    extra:(ctx, P, t, A, B) => {
      const k = ease((t - TC - 1.4)/0.6); if (k <= 0) return;
      ctx.save(); ctx.globalAlpha = k;
@@ -526,7 +570,7 @@ sims[9] = new Sim(9, $('#c9'), TT, scene(
 
 sims[10] = new Sim(10, $('#c10'), TT, scene(
   {u:[22,37], v:[10,-11], imp:[-0.3,-1.2], impLabel:'I', cx:0.5, cy:0.3, wall:true, labelSide:-1},
-  {a:[0.55,0.925], b:[-0.3,-1.2], la:'mu', lb:'I', ls:'mv', s1:-1, s2:-1, s3:1, caption:['Old momentum mu = 0.55i + 0.925j', 'I = −0.3i − 1.2j']}));
+  {a:[0.55,0.925], b:[-0.3,-1.2], la:'mu', lb:'I', ls:'mv', s1:-1, s2:-1, s3:1, caption:['Old momentum mu', 'I = −0.3i − 1.2j']}));
 
 /* Example 11: two bodies on one line, then they coalesce */
 sims[11] = new Sim(11, $('#c11'), TT, (ctx, t, w, h) => {
@@ -555,24 +599,12 @@ sims[11] = new Sim(11, $('#c11'), TT, (ctx, t, w, h) => {
   text(ctx, t < TC ? 'Before the collision' : 'After: one particle of mass 0.4 kg', L.x + 10, L.y + L.h - 10, {weight:600, color:css('--ink')});
   axesKey(ctx, L.x + L.w - 48, L.y + L.h - 14);
   drawTriangle(ctx, R, t < TC ? Math.min(t, TC - 0.01) : t, {a:[3,-1.5], b:[4,-2], la:'m₁u₁', lb:'m₂u₂', ls:'total',
-    c1:css('--vel'), c2:css('--p2'), s1:-1, s2:-1, s3:1, offsetTotal:true, title:'Momentum vectors', caption:['m₁u₁ = 3i − 1.5j', '(3i − 1.5j) + (4i − 2j) = 7i − 3.5j']});
+    c1:css('--vel'), c2:css('--p2'), s1:-1, s2:-1, s3:1, offsetTotal:true, title:'Momentum vectors', caption:['Momentum of the first particle', '(3i − 1.5j) + (4i − 2j) = 7i − 3.5j']});
 });
 
+[8,9,10,11].forEach(k => { sims[k].stopAt = TC - 0.05; });
+
 /* ---------- predictions ---------- */
-function buildPredict(id, q, opts, correct, feedback){
-  const box = document.querySelector(`[data-predict="${id}"]`);
-  box.innerHTML = `<span class="lbl">PREDICT FIRST</span><div>${q}</div><div class="opts"></div><div class="fb" aria-live="polite"></div>`;
-  const o = box.querySelector('.opts'), fb = box.querySelector('.fb');
-  opts.forEach((t, i) => {
-    const b = document.createElement('button'); b.className = 'opt'; b.innerHTML = t;
-    b.onclick = () => {
-      o.querySelectorAll('.opt').forEach(x => x.classList.remove('right','wrong'));
-      b.classList.add(i === correct ? 'right' : 'wrong');
-      fb.innerHTML = (i === correct ? '<strong>Yes.</strong> ' : '<strong>Not quite.</strong> ') + feedback + ' Now press Play to watch it.';
-    };
-    o.append(b);
-  });
-}
 buildPredict(8, 'A student says the new velocity is simply (10i − 5j) + (3i − 2j) = 13i − 7j. Are they right?',
   ['Yes', 'No: the impulse changes the momentum, not the velocity'], 1,
   'The impulse is added to the momentum mu. You divide by the mass at the end, so the velocity changes by I ÷ m = 15i − 10j.');
@@ -688,7 +720,7 @@ function buildWork(id, steps){
     if (html){ const c = document.createElement('div'); c.className = 'confirm'; c.innerHTML = html; el.append(c); }
     cur++; prog();
     if (cur < frames.length) show(cur);
-    else { sum.hidden = false; const f = document.createElement('div'); f.className = 'finish'; f.innerHTML = '<strong>Programme complete.</strong> Read through the summary below.'; list.append(f); }
+    else { sum.hidden = false; const f = document.createElement('div'); f.className = 'finish'; f.innerHTML = '<strong>Programme complete.</strong> The full animation is now unlocked: press Play to check your answer, then read the summary below.'; list.append(f); markSolved(id); }
   };
   function show(i){
     const f = frames[i], el = document.createElement('div'), fid = `f${id}_${i}`;
