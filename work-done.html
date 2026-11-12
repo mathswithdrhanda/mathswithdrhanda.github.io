@@ -202,6 +202,9 @@ footer{margin-top:24px;padding-top:16px;border-top:1px solid var(--line);color:v
 canvas.sim.tall{height:290px}
 #c3,#c4{height:390px}
 #cL{height:360px}
+
+.opt.chosen{border-color:var(--accent);background:var(--accent-soft);font-weight:600}
+.opt:disabled{cursor:default;opacity:1}
 </style>
 </head>
 <body>
@@ -341,6 +344,46 @@ canvas.sim.tall{height:290px}
 </div>
 
 <script>
+
+/* ---------- predict, solve, then check ---------- */
+const SOLVED = new Set();
+const isSolved = id => SOLVED.has(String(id));
+const PRED = {};
+function lockOverlay(ctx, w, h){
+  const st = getComputedStyle(document.documentElement);
+  const bh = 58, y = h - bh - 6;
+  ctx.save(); ctx.globalAlpha = 0.93; ctx.fillStyle = st.getPropertyValue('--surface').trim(); ctx.fillRect(12, y, w - 24, bh);
+  ctx.globalAlpha = 1; ctx.strokeStyle = st.getPropertyValue('--accent').trim(); ctx.lineWidth = 1.5; ctx.strokeRect(12, y, w - 24, bh);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = st.getPropertyValue('--ink').trim();
+  ctx.font = `700 16px ${st.getPropertyValue('--display').split(',')[0]}, sans-serif`; ctx.fillText('What happens next?', w/2, y + 20);
+  ctx.fillStyle = st.getPropertyValue('--muted').trim(); ctx.font = `500 13px ${st.getPropertyValue('--body').split(',')[0]}, sans-serif`;
+  ctx.fillText('Work it out in the frames. The rest of the animation unlocks when you finish.', w/2, y + 40);
+  ctx.restore();
+}
+function markSolved(id){
+  SOLVED.add(String(id));
+  if (sims[id]) sims[id].reset();
+  if (PRED[id]) PRED[id].reveal();
+}
+function buildPredict(id, q, opts, correct, feedback){
+  const box = document.querySelector(`[data-predict="${id}"]`);
+  box.innerHTML = `<span class="lbl">PREDICT FIRST</span><div>${q}</div><div class="opts"></div><div class="fb" aria-live="polite"></div>`;
+  const o = box.querySelector('.opts'), fb = box.querySelector('.fb');
+  let choice = null;
+  const btns = opts.map((t, i) => {
+    const b = document.createElement('button'); b.className = 'opt'; b.innerHTML = t;
+    b.onclick = () => {
+      if (isSolved(id)) return;
+      choice = i; btns.forEach(x => x.classList.remove('chosen')); b.classList.add('chosen');
+      fb.innerHTML = '<strong>Prediction saved.</strong> Press Play to watch the set-up, then work through the frames to find out whether you were right.';
+    };
+    o.append(b); return b;
+  });
+  PRED[id] = { reveal(){
+    btns.forEach((b, i) => { b.classList.remove('chosen'); if (i === correct) b.classList.add('right'); else if (i === choice) b.classList.add('wrong'); b.disabled = true; });
+    fb.innerHTML = (choice === null ? '<strong>The answer:</strong> ' : choice === correct ? '<strong>Your prediction was right.</strong> ' : '<strong>Your prediction was not right this time.</strong> ') + feedback + ' Press Play to watch the full answer.';
+  }};
+}
 /* ---------- helpers ---------- */
 const $ = s => document.querySelector(s);
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -422,43 +465,30 @@ const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : 1 - Math.pow(1 - x, 3);
 const TC = 1.6, TT = 4.2;
 const sims = {};
 class Sim{
+  get end(){ return (this.stopAt != null && !isSolved(this.id)) ? this.stopAt : this.T; }
   constructor(id, canvas, duration, draw){ this.id=id; this.c=canvas; this.T=duration; this.drawFn=draw; this.t=0; this.running=false; this.render(); }
-  render(){ const {ctx,w,h} = fit(this.c); ctx.clearRect(0,0,w,h); this.drawFn(ctx, this.t, w, h); }
+  render(){ const {ctx,w,h} = fit(this.c); ctx.clearRect(0,0,w,h); this.drawFn(ctx, this.t, w, h); if (this.stopAt != null && !isSolved(this.id) && this.t >= this.stopAt - 1e-6) lockOverlay(ctx, w, h); }
   play(){
-    if (this.t >= this.T) this.t = 0;
-    if (reduced){ this.t = this.T; this.render(); this.btn(); return; }
+    if (this.t >= this.end) this.t = 0;
+    if (reduced){ this.t = this.end; this.render(); this.btn(); return; }
     this.running = true; this.last = performance.now();
     const step = now => {
       if (!this.running) return;
       this.t += (now - this.last)/1000 * ($('#slowmo').checked ? 0.3 : 1); this.last = now;
-      if (this.t >= this.T){ if ($('#loopall').checked) this.t = 0; else { this.t = this.T; this.running = false; this.render(); this.btn(); return; } }
+      if (this.t >= this.end){ if ($('#loopall').checked) this.t = 0; else { this.t = this.end; this.running = false; this.render(); this.btn(); return; } }
       this.render(); requestAnimationFrame(step);
     };
     requestAnimationFrame(step); this.btn();
   }
   pause(){ this.running = false; this.btn(); }
   reset(){ this.running = false; this.t = 0; this.render(); this.btn(); }
-  btn(){ const b = document.querySelector(`[data-play="${this.id}"]`); if (b) b.textContent = this.running ? '❚❚ Pause' : (this.t >= this.T ? '↻ Replay' : '▶ Play'); }
+  btn(){ const b = document.querySelector(`[data-play="${this.id}"]`); if (b) b.textContent = this.running ? '❚❚ Pause' : (this.t >= this.end ? '↻ Replay' : '▶ Play'); }
 }
 document.addEventListener('click', e => {
   const p = e.target.closest('[data-play]'); if (p){ const s = sims[p.dataset.play]; s.running ? s.pause() : s.play(); }
   const r = e.target.closest('[data-reset]'); if (r) sims[r.dataset.reset].reset();
 });
 
-function buildPredict(id, q, opts, correct, feedback){
-  const box = document.querySelector(`[data-predict="${id}"]`);
-  box.innerHTML = `<span class="lbl">PREDICT FIRST</span><div>${q}</div><div class="opts"></div><div class="fb" aria-live="polite"></div>`;
-  const o = box.querySelector('.opts'), fb = box.querySelector('.fb');
-  opts.forEach((t, i) => {
-    const b = document.createElement('button'); b.className = 'opt'; b.innerHTML = t;
-    b.onclick = () => {
-      o.querySelectorAll('.opt').forEach(x => x.classList.remove('right','wrong'));
-      b.classList.add(i === correct ? 'right' : 'wrong');
-      fb.innerHTML = (i === correct ? '<strong>Yes.</strong> ' : '<strong>Not quite.</strong> ') + feedback + ' Now press Play to watch it.';
-    };
-    o.append(b);
-  });
-}
 
 /* ---------- Stroud-style frames ---------- */
 function parseNum(s){
@@ -491,7 +521,7 @@ function buildWork(id, steps){
     if (html){ const c = document.createElement('div'); c.className = 'confirm'; c.innerHTML = html; el.append(c); }
     cur++; prog();
     if (cur < frames.length) show(cur);
-    else { sum.hidden = false; const f = document.createElement('div'); f.className = 'finish'; f.innerHTML = '<strong>Programme complete.</strong> Read through the summary below.'; list.append(f); }
+    else { sum.hidden = false; const f = document.createElement('div'); f.className = 'finish'; f.innerHTML = '<strong>Programme complete.</strong> The full animation is now unlocked: press Play to check your answer, then read the summary below.'; list.append(f); markSolved(id); }
   };
   function show(i){
     const f = frames[i], el = document.createElement('div'), fid = `f${id}_${i}`;
@@ -596,22 +626,23 @@ function pullScene(cfg){
     if (cfg.angle){
       const L = 86, a = cfg.angle*Math.PI/180, ox = bx + bw, oy = gy - bh + 8;
       arrow2(ctx, ox, oy, ox + L*Math.cos(a), oy - L*Math.sin(a), css('--impulse'), cfg.fLabel, {w:3, side:-1});
-      arrow2(ctx, ox, oy, ox + L*Math.cos(a), oy, css('--impulse'), null, {w:1.5, dash:[4,4]});
+      if (isSolved(cfg.id)) arrow2(ctx, ox, oy, ox + L*Math.cos(a), oy, css('--impulse'), null, {w:1.5, dash:[4,4]});
       ctx.save(); ctx.strokeStyle = css('--impulse'); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(ox, oy, 26, -a, 0); ctx.stroke(); ctx.restore();
       text(ctx, cfg.angle + '°', ox + 30, oy - 6, {mono:true, color:css('--impulse'), weight:600});
-      text(ctx, cfg.compLabel, ox + L*Math.cos(a)/2, oy + 16, {align:'center', mono:true, color:css('--impulse')});
+      if (isSolved(cfg.id)) text(ctx, cfg.compLabel, ox + L*Math.cos(a)/2, oy + 16, {align:'center', mono:true, color:css('--impulse')});
     } else {
       arrow2(ctx, bx + bw, my, bx + bw + 72, my, css('--impulse'), cfg.fLabel, {w:3, side:-1});
     }
     if (cfg.resist) arrow2(ctx, bx, my + 10, bx - 60, my + 10, css('--warn'), cfg.resist, {w:3, side:1});
-    if (cfg.note) text(ctx, cfg.note, bx + bw/2, gy - bh - 14, {align:'center', mono:true, color:css('--vel'), weight:600});
+    if (cfg.note) text(ctx, isSolved(cfg.id) ? cfg.note : 'constant speed', bx + bw/2, gy - bh - 14, {align:'center', mono:true, color:css('--vel'), weight:600});
     ruler(ctx, x0, bx, gy + 30 + (cfg.ice ? 10 : 0), `s = ${fmt(s, 1)} m`);
-    meter(ctx, cfg.meter ? cfg.meter(s) : [[`Work done = ${cfg.fWord} × s`], [`          = ${cfg.fWord} × ${fmt(s,1)} = ${fmt(cfg.F*s, 1)} J`, css('--accent')]]);
+    if (!isSolved(cfg.id)) {}
+    else meter(ctx, cfg.meter ? cfg.meter(s) : [[`Work done = ${cfg.fWord} × s`], [`          = ${cfg.fWord} × ${fmt(s,1)} = ${fmt(cfg.F*s, 1)} J`, css('--accent')]]);
   };
 }
-sims[1] = new Sim(1, $('#c1'), TW, pullScene({dist:7, F:15, fWord:'15', fLabel:'15 N'}));
-sims[2] = new Sim(2, $('#c2'), TW, pullScene({dist:12, F:8, fWord:'F', fLabel:'F N', resist:'R N', note:'constant speed, a = 0', meter: s => [['Work done = F × s'], [`Work done so far: ${fmt(8*s,1)} J of 96 J`, css('--accent')]]}));
-sims[5] = new Sim(5, $('#c5'), TW, pullScene({dist:15, F:27*Math.cos(25*Math.PI/180), fWord:'27 cos 25°', fLabel:'27 N', angle:25, compLabel:'27 cos 25°', ice:true}));
+sims[1] = new Sim(1, $('#c1'), TW, pullScene({id:1, dist:7, F:15, fWord:'15', fLabel:'15 N'}));
+sims[2] = new Sim(2, $('#c2'), TW, pullScene({id:2, dist:12, F:8, fWord:'F', fLabel:'F N', resist:'R N', note:'constant speed, a = 0', meter: s => [['Work done = F × s, with F = 8 N'], [`          = 8 × ${fmt(s,1)} = ${fmt(8*s,1)} J`, css('--accent')]]}));
+sims[5] = new Sim(5, $('#c5'), TW, pullScene({id:5, dist:15, F:27*Math.cos(25*Math.PI/180), fWord:'27 cos 25°', fLabel:'27 N', angle:25, compLabel:'27 cos 25°', ice:true}));
 
 
 /* Example 3: vertical lift */
@@ -624,14 +655,15 @@ sims[3] = new Sim(3, $('#c3'), TW, (ctx, t, w, h) => {
   box(ctx, cx - bw/2, by, bw, bh, css('--objA'), '30 kg');
   arrow2(ctx, cx + bw/2 + 14, by + bh/2, cx + bw/2 + 14, by - 30, css('--impulse'), 'T N', {w:3, side:-1});
   arrow2(ctx, cx, by + bh, cx, by + bh + 34, css('--warn'), '30g N', {w:3, side:1});
-  text(ctx, '0 m s⁻²', cx + bw/2 + 26, by + bh/2 + 20, {mono:true, color:css('--vel')});
+  if (isSolved(3)) text(ctx, '0 m s⁻²', cx + bw/2 + 26, by + bh/2 + 20, {mono:true, color:css('--vel')});
   const rx = cx - bw/2 - 34;
   if (hm > 0.05){
     ctx.save(); ctx.strokeStyle = css('--accent'); ctx.lineWidth = 1.5; ctx.beginPath();
     ctx.moveTo(rx - 5, gy); ctx.lineTo(rx + 5, gy); ctx.moveTo(rx - 5, gy - hm*k); ctx.lineTo(rx + 5, gy - hm*k); ctx.moveTo(rx, gy); ctx.lineTo(rx, gy - hm*k); ctx.stroke(); ctx.restore();
     text(ctx, `h = ${fmt(hm,1)} m`, rx - 8, gy - hm*k/2, {align:'right', mono:true, weight:600, color:css('--accent')});
   }
-  meter(ctx, [['Work done = T × h = 30g × h'], [`          = 294 × ${fmt(hm,1)} = ${fmt(294*hm, 0)} J`, css('--accent')]]);
+  if (!isSolved(3)) meter(ctx, [[`Height raised: ${fmt(hm,1)} m`]]);
+  else meter(ctx, [['Work done = T × h = 30g × h'], [`          = 294 × ${fmt(hm,1)} = ${fmt(294*hm, 0)} J`, css('--accent')]]);
 });
 
 /* Example 4: rough slope */
@@ -648,19 +680,20 @@ sims[4] = new Sim(4, $('#c4'), TW, (ctx, t, w, h) => {
   const px = base.x + d*ux + nx*r, py = base.y + d*uy + ny*r;
   const sx = base.x + s0*ux + nx*r, sy = base.y + s0*uy + ny*r;
   // height gained
-  if (s > 0.1){
+  if (s > 0.1 && isSolved(4)){
     ctx.save(); ctx.setLineDash([4,4]); ctx.strokeStyle = css('--accent'); ctx.lineWidth = 1.5;
     const vx = px + r + 34;
     ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(vx, sy); ctx.moveTo(px + r, py); ctx.lineTo(vx, py); ctx.stroke(); ctx.setLineDash([]);
     ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(vx, sy); ctx.lineTo(vx, py); ctx.stroke(); ctx.restore();
-    text(ctx, `h = ${fmt(s*0.5,1)} m`, vx + 6, (sy + py)/2 + 4, {mono:true, weight:600, color:css('--accent')});
+    text(ctx, isSolved(4) ? `h = ${fmt(s*0.5,1)} m` : 'h', vx + 6, (sy + py)/2 + 4, {mono:true, weight:600, color:css('--accent')});
   }
   dot(ctx, px, py, r, css('--objA'), '2');
   arrow2(ctx, px + ux*r, py + uy*r, px + ux*(r + 60), py + uy*(r + 60), css('--impulse'), 'P', {w:3, side:-1});
   arrow2(ctx, px - ux*r, py - uy*r, px - ux*(r + 48), py - uy*(r + 48), css('--warn'), 'F', {w:3, side:1});
   arrow2(ctx, px + nx*r, py + ny*r, px + nx*(r + 44), py + ny*(r + 44), css('--vel'), 'R', {w:2.5, side:1});
   arrow2(ctx, px, py + r, px, py + r + 46, css('--ink'), '2g', {w:2.5, side:-1});
-  meter(ctx, [[`s = ${fmt(s,1)} m along the slope`],
+  if (!isSolved(4)) meter(ctx, [[`Distance moved along the slope: ${fmt(s,1)} m`]]);
+  else meter(ctx, [[`s = ${fmt(s,1)} m along the slope`],
               [`Against gravity:  2g × h  = ${fmt(2*g*s*0.5, 1)} J`, css('--accent')],
               [`Against friction: F × s   = ${fmt(0.35*2*g*Math.cos(a)*s, 1)} J`, css('--warn')]]);
 });

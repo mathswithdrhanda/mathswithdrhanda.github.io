@@ -943,7 +943,7 @@ sims[2] = new Sim(2, $('#c2'), 7, (ctx,t,w,h) => {
   ctx.strokeStyle = css('--line'); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L,Tp-6); ctx.lineTo(L,B); ctx.lineTo(R,B); ctx.stroke();
   ctx.fillStyle = css('--impulse-soft'); ctx.fillRect(L, B-4.5*syg, tt*sxg, 4.5*syg);
   ctx.strokeStyle = css('--impulse'); ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(L, B-4.5*syg); ctx.lineTo(L+6*sxg, B-4.5*syg); ctx.stroke();
-  text(ctx, (isSolved(2) ? `I = Ft = 4.5 × ${fmt(tt,1)} = ${fmt(4.5*tt,1)} N s` : 'I = Ft = area under the graph'), L+8, Tp - 4, {mono:true, weight:600, color:css('--impulse'), size:13});
+  if (isSolved(2)) text(ctx, `I = Ft = 4.5 × ${fmt(tt,1)} = ${fmt(4.5*tt,1)} N s`, L+8, Tp - 4, {mono:true, weight:600, color:css('--impulse'), size:13});
   text(ctx, '0', L, B+14, {align:'center', mono:true}); text(ctx, '6 s', L+6*sxg, B+14, {align:'center', mono:true});
   text(ctx, '4.5 N', L-4, B-4.5*syg+4, {align:'right', mono:true});
   if (isSolved(2)) text(ctx, `momentum = 2 × ${fmt(v,2)} = ${fmt(2*v,1)} N s`, R, Tp - 4, {align:'right', mono:true, color:css('--accent'), weight:600});
@@ -970,7 +970,7 @@ sims[3] = new Sim(3, $('#c3'), 3.6, (ctx,t,w,h) => {
   if (before) arrow(ctx, x-30, ay, x+30, css('--vel'), '3.5 m s⁻¹'); else arrow(ctx, x+24, ay, x-24, css('--vel'), '2.5 m s⁻¹');
   ball(ctx, x, yb, r, css('--objA'), '', '0.2 kg');
   const dt = t - tc;
-  if (dt > -0.05 && dt < 0.8){ ctx.save(); ctx.globalAlpha = 1 - Math.max(0,dt)/0.8;
+  if (isSolved(3) && dt > -0.05 && dt < 0.8){ ctx.save(); ctx.globalAlpha = 1 - Math.max(0,dt)/0.8;
     arrow(ctx, x - r - 4, yb, x - r - 60, css('--impulse'), 'I on ball', {below:true, w:3});
     arrow(ctx, wallX + 16, yb + 30, wallX + 70, css('--impulse'), 'I on wall', {below:true, w:3});
     ctx.restore(); }
